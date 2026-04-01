@@ -8,6 +8,9 @@ import { Toaster } from "./components/ui/toaster";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { CartProvider } from "./context/CartContext";
 
+// Protected Route Guards
+import { ProtectedRoute, SellerRoute } from "./components/ProtectedRoute";
+
 // Pages
 import Index from "./pages/Index";
 import Products from "./pages/Products";
@@ -25,17 +28,36 @@ const App = () => {
       <TooltipProvider>
         <ToastProvider>
           <CartProvider>
-            {/* The standard Radix-based Toaster */}
             <Toaster />
-            
+
             <BrowserRouter>
               <Routes>
+                {/* Public Routes */}
                 <Route path="/" element={<Index />} />
                 <Route path="/products" element={<Products />} />
                 <Route path="/product/:id" element={<ProductDetail />} />
-                <Route path="/cart" element={<Cart />} />
                 <Route path="/auth" element={<Auth />} />
-                <Route path="/sell" element={<SellerDashboard />} />
+
+                {/* Protected - any logged in user */}
+                <Route
+                  path="/cart"
+                  element={
+                    <ProtectedRoute>
+                      <Cart />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Protected - sellers only */}
+                <Route
+                  path="/sell"
+                  element={
+                    <SellerRoute>
+                      <SellerDashboard />
+                    </SellerRoute>
+                  }
+                />
+
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
