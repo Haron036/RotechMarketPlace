@@ -1,31 +1,37 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Package, DollarSign, TrendingUp, Star, CheckCircle, Loader2 } from "lucide-react";
+import { Package, DollarSign, TrendingUp, Star, CheckCircle, Loader2, Trash2 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { Button } from "../components/ui/button";
 import NewListingModal from "../components/NewListingModal";
+import { useToast } from "../components/ui/use-toast";
+
+const API_BASE = "http://localhost:8080/api";
 
 const SellerDashboard = () => {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState(null);
   const [sellerName, setSellerName] = useState("Seller");
+  const { toast } = useToast();
 
-  // 1. Fetch products belonging to the logged-in user
+  // ─── Fetch seller's products ──────────────────────────────
   const fetchMyProducts = useCallback(async () => {
+    setLoading(true);
     const token = localStorage.getItem("jwt_token");
     try {
-      const response = await fetch("http://localhost:8080/api/products/my-products", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const response = await fetch(`${API_BASE}/products/my-products`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
         const data = await response.json();
         setListings(data);
+      } else if (response.status === 403) {
+        toast({ variant: "destructive", title: "Access Denied", description: "Only sellers can view this page." });
       }
     } catch (error) {
-      console.error("Error fetching seller products:", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not load listings." });
     } finally {
       setLoading(false);
     }
@@ -37,18 +43,66 @@ const SellerDashboard = () => {
     fetchMyProducts();
   }, [fetchMyProducts]);
 
-  // 2. Calculate dynamic stats
-  const stats = [
-    { label: "Total Sales", value: "$0.00", icon: DollarSign, change: "+0%" },
-    { label: "Active Listings", value: listings.length, icon: Package, change: listings.length > 0 ? "+1" : "0" },
-    { label: "Views This Month", value: "0", icon: TrendingUp, change: "+0%" },
-    { label: "Avg Rating", value: "5.0", icon: Star, change: "+0.0" },
-  ];
+  // ─── Delete a product ─────────────────────────────────────
+  const handleDelete = async (productId) => {
+    const token = localStorage.getItem("jwt_token");
+    setDeletingId(productId);
+    try {
+      const response = await fetch(`${API_BASE}/products/${productId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        setListings((prev) => prev.filter((p) => p.id !== productId));
+        toast({ title: "Deleted", description: "Listing removed successfully." });
+      } else {
+        throw new Error("Failed to delete");
+      }
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error", description: "Could not delete listing." });
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
-  // 3. Handle UI update after modal submission
+  // ─── Handle new product added from modal ──────────────────
   const handleProductAdded = (newProduct) => {
     setListings((prev) => [newProduct, ...prev]);
   };
+
+  // ─── Compute dynamic stats from real data ─────────────────
+  const totalRevenue = listings.reduce((sum, p) => sum + (p.price ?? 0), 0);
+  const avgRating =
+    listings.length > 0
+      ? (listings.reduce((sum, p) => sum + (p.rating ?? 0), 0) / listings.length).toFixed(1)
+      : "0.0";
+
+  const stats = [
+    {
+      label: "Total Revenue",
+      value: `$${totalRevenue.toFixed(2)}`,
+      icon: DollarSign,
+      change: listings.length > 0 ? "+active" : "0",
+    },
+    {
+      label: "Active Listings",
+      value: listings.length,
+      icon: Package,
+      change: listings.length > 0 ? `+${listings.length}` : "0",
+    },
+    {
+      label: "Total Stock",
+      value: listings.reduce((sum, p) => sum + (p.stock ?? 0), 0),
+      icon: TrendingUp,
+      change: "+live",
+    },
+    {
+      label: "Avg Rating",
+      value: avgRating,
+      icon: Star,
+      change: "+0.0",
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-background">
@@ -62,7 +116,7 @@ const SellerDashboard = () => {
               <CheckCircle className="w-3 h-3 text-primary" />
             </div>
           </div>
-          
+
           <NewListingModal onProductAdded={handleProductAdded} />
         </div>
 
@@ -90,12 +144,18 @@ const SellerDashboard = () => {
           ))}
         </div>
 
-        {/* Listings / Recent Activity Table */}
+        {/* Listings Table */}
         <div className="rounded-xl bg-card border border-border overflow-hidden shadow-sm">
           <div className="p-5 border-b border-border flex justify-between items-center">
             <h3 className="font-serif text-xl text-foreground">Your Active Listings</h3>
-            <Button variant="ghost" size="sm" className="text-xs text-primary" onClick={fetchMyProducts}>
-              Refresh
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-primary"
+              onClick={fetchMyProducts}
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Refresh"}
             </Button>
           </div>
           <div className="overflow-x-auto">
@@ -112,34 +172,69 @@ const SellerDashboard = () => {
                     <th className="text-left text-xs font-bold uppercase tracking-wider text-muted-foreground px-5 py-4">Stock</th>
                     <th className="text-left text-xs font-bold uppercase tracking-wider text-muted-foreground px-5 py-4">Status</th>
                     <th className="text-right text-xs font-bold uppercase tracking-wider text-muted-foreground px-5 py-4">Price</th>
+                    <th className="text-right text-xs font-bold uppercase tracking-wider text-muted-foreground px-5 py-4">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {listings.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="px-5 py-10 text-center text-sm text-muted-foreground italic">
+                      <td colSpan="6" className="px-5 py-10 text-center text-sm text-muted-foreground italic">
                         No active listings found. Create one to get started!
                       </td>
                     </tr>
                   ) : (
                     listings.map((product) => (
-                      <tr key={product.id} className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors group">
-                        <td className="px-5 py-4 text-sm font-bold text-foreground">
-                          {product.name}
+                      <tr
+                        key={product.id}
+                        className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors group"
+                      >
+                        {/* Product Name + Thumbnail */}
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            {product.images?.[0] && (
+                              <img
+                                src={product.images[0]}
+                                alt={product.name}
+                                className="w-10 h-10 rounded-lg object-cover border border-border"
+                                onError={(e) => { e.target.style.display = "none"; }}
+                              />
+                            )}
+                            <span className="text-sm font-bold text-foreground">{product.name}</span>
+                          </div>
                         </td>
+
                         <td className="px-5 py-4 text-sm text-muted-foreground group-hover:text-foreground transition-colors">
                           {product.category || "General"}
                         </td>
+
                         <td className="px-5 py-4 text-sm text-muted-foreground">
-                          {product.stock} units
+                          {product.stock ?? 0} units
                         </td>
+
                         <td className="px-5 py-4">
                           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-tighter bg-emerald-500/10 text-emerald-600">
                             Live
                           </span>
                         </td>
+
                         <td className="px-5 py-4 text-sm font-bold text-foreground text-right">
-                          ${product.price.toFixed(2)}
+                          ${product.price?.toFixed(2) ?? "0.00"}
+                        </td>
+
+                        {/* Delete Action */}
+                        <td className="px-5 py-4 text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:text-red-700 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleDelete(product.id)}
+                            disabled={deletingId === product.id}
+                          >
+                            {deletingId === product.id
+                              ? <Loader2 className="w-4 h-4 animate-spin" />
+                              : <Trash2 className="w-4 h-4" />
+                            }
+                          </Button>
                         </td>
                       </tr>
                     ))

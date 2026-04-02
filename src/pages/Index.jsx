@@ -1,16 +1,56 @@
 import { Link } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
 import heroImg from "../assets/hero-marketplace.jpg";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import ProductCard from "../components/ProductCard";
-import { products, categories } from "../lib/mock-data.js";
+import { categories } from "../lib/mock-data.js"; // keep static categories
 import { Button } from "../components/ui/button.jsx";
 
+const API_BASE = "http://localhost:8080/api";
+
 const Index = () => {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // ─── Fetch all products from backend ─────────────────────
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(`${API_BASE}/products`);
+        if (response.ok) {
+          const data = await response.json();
+          setProducts(data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch products:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
+  // ─── Split into featured and trending ────────────────────
   const featured = products.slice(0, 4);
-  const trending = products.slice(4);
+  const trending = products.slice(4, 8);
+
+  // ─── Shared loading skeleton ──────────────────────────────
+  const ProductSkeleton = () => (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="space-y-3 animate-pulse">
+          <div className="aspect-square rounded-2xl bg-secondary" />
+          <div className="h-3 bg-secondary rounded w-2/3" />
+          <div className="h-3 bg-secondary rounded w-1/2" />
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -69,12 +109,16 @@ const Index = () => {
               transition={{ delay: i * 0.05 }}
             >
               <Link
-                to={`/products?category=${cat.id}`}
+                to={`/products?category=${cat.name}`}  // use name to match backend
                 className="flex flex-col items-center p-4 rounded-xl bg-card border border-border hover:border-primary/30 hover:shadow-md transition-all group"
               >
                 <span className="text-2xl mb-2">{cat.icon}</span>
-                <span className="text-xs font-medium text-foreground group-hover:text-primary transition-colors">{cat.name}</span>
-                <span className="text-[10px] text-muted-foreground">{cat.count.toLocaleString()} items</span>
+                <span className="text-xs font-medium text-foreground group-hover:text-primary transition-colors">
+                  {cat.name}
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  {cat.count.toLocaleString()} items
+                </span>
               </Link>
             </motion.div>
           ))}
@@ -85,15 +129,30 @@ const Index = () => {
       <section className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <h2 className="font-serif text-3xl text-foreground">Featured Finds</h2>
-          <Link to="/products" className="text-sm text-primary font-medium hover:underline flex items-center gap-1">
+          <Link
+            to="/products"
+            className="text-sm text-primary font-medium hover:underline flex items-center gap-1"
+          >
             View All <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-          {featured.map((product, i) => (
-            <ProductCard key={product.id} product={product} index={i} />
-          ))}
-        </div>
+
+        {loading ? (
+          <ProductSkeleton />
+        ) : featured.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+            {featured.map((product, i) => (
+              <ProductCard key={product.id} product={product} index={i} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-16 text-muted-foreground text-sm italic">
+            No products listed yet.{" "}
+            <Link to="/sell" className="text-primary hover:underline">
+              Be the first to sell!
+            </Link>
+          </div>
+        )}
       </section>
 
       {/* Banner */}
@@ -106,7 +165,10 @@ const Index = () => {
             Join thousands of sellers reaching customers in 190+ countries. Low fees, powerful tools, global reach.
           </p>
           <Link to="/sell">
-            <Button size="lg" className="bg-primary-foreground text-foreground hover:bg-primary-foreground/90 font-medium">
+            <Button
+              size="lg"
+              className="bg-primary-foreground text-foreground hover:bg-primary-foreground/90 font-medium"
+            >
               Open Your Shop
             </Button>
           </Link>
@@ -116,11 +178,20 @@ const Index = () => {
       {/* Trending */}
       <section className="container mx-auto px-4 py-8 pb-16">
         <h2 className="font-serif text-3xl text-foreground mb-8">Trending Now</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-          {trending.map((product, i) => (
-            <ProductCard key={product.id} product={product} index={i} />
-          ))}
-        </div>
+
+        {loading ? (
+          <ProductSkeleton />
+        ) : trending.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+            {trending.map((product, i) => (
+              <ProductCard key={product.id} product={product} index={i} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-16 text-muted-foreground text-sm italic">
+            More products coming soon. Check back later!
+          </div>
+        )}
       </section>
 
       <Footer />
