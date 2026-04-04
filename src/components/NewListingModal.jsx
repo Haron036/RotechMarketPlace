@@ -36,10 +36,9 @@ const NewListingModal = ({ onProductAdded }) => {
       return;
     }
 
-    // Validate file types and sizes
     const validFiles = files.filter(file => {
       const isValidType = ["image/jpeg", "image/png", "image/webp"].includes(file.type);
-      const isValidSize = file.size <= 5 * 1024 * 1024; // 5MB
+      const isValidSize = file.size <= 5 * 1024 * 1024;
       if (!isValidType) toast({ variant: "destructive", title: "Invalid file type", description: `${file.name} is not a supported image.` });
       if (!isValidSize) toast({ variant: "destructive", title: "File too large", description: `${file.name} exceeds 5MB.` });
       return isValidType && isValidSize;
@@ -68,21 +67,16 @@ const NewListingModal = ({ onProductAdded }) => {
       const token = localStorage.getItem("jwt_token");
       const formData = new FormData();
 
-      // Build product object from form data
       const productData = {
         name: data.name,
         description: data.description,
         price: parseFloat(data.price),
         stock: parseInt(data.stock),
         category: data.category,
-        // Optional: include currency if needed (backend sets default)
-        // currency: "USD"
       };
 
-      // Append product JSON as a single string part
       formData.append("product", JSON.stringify(productData));
 
-      // Append each image file
       imageFiles.forEach((file) => {
         formData.append("images", file);
       });
@@ -91,7 +85,6 @@ const NewListingModal = ({ onProductAdded }) => {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`
-          // Content-Type is omitted so browser sets multipart boundary
         },
         body: formData
       });
@@ -106,7 +99,6 @@ const NewListingModal = ({ onProductAdded }) => {
 
       toast({ title: "Success!", description: "Product listed successfully." });
 
-      // Clean up preview URLs
       imagePreviews.forEach(url => URL.revokeObjectURL(url));
       reset();
       setImageFiles([]);
@@ -119,7 +111,6 @@ const NewListingModal = ({ onProductAdded }) => {
     }
   };
 
-  // Clean up previews when modal closes without submit
   const handleOpenChange = (newOpen) => {
     if (!newOpen) {
       imagePreviews.forEach(url => URL.revokeObjectURL(url));
@@ -129,7 +120,6 @@ const NewListingModal = ({ onProductAdded }) => {
     }
     setOpen(newOpen);
   };
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
@@ -137,7 +127,9 @@ const NewListingModal = ({ onProductAdded }) => {
           <Plus className="w-4 h-4 mr-2" /> New Listing
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-131.25">
+
+      {/* ↓ only change: added max-h-[90vh] overflow-y-auto */}
+      <DialogContent className="sm:max-w-131.25 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-serif text-2xl">Create New Listing</DialogTitle>
         </DialogHeader>
@@ -214,35 +206,45 @@ const NewListingModal = ({ onProductAdded }) => {
 
           {/* Image Upload Section */}
           <div className="grid gap-2">
-            <Label>Product Images (up to 5)</Label>
-            <div className="flex flex-wrap gap-4">
+            <div className="flex items-center justify-between">
+              <Label>Product Images</Label>
+              <span className="text-xs text-muted-foreground">{imageFiles.length}/5 uploaded</span>
+            </div>
+
+            <div className="flex gap-3 overflow-x-auto pb-2 pt-1 min-h-[6.5rem]">
               {imagePreviews.map((preview, idx) => (
-                <div key={idx} className="relative w-24 h-24 rounded-md overflow-hidden border border-gray-200">
+                <div
+                  key={idx}
+                  className="relative flex-shrink-0 w-24 h-24 rounded-md overflow-hidden border border-gray-200"
+                >
                   <img src={preview} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={() => removeImage(idx)}
-                    className="absolute top-1 right-1 bg-black/50 rounded-full p-1 hover:bg-black/70"
+                    className="absolute top-1 right-1 bg-black/50 rounded-full p-1 hover:bg-black/70 transition-colors"
                   >
                     <X className="w-3 h-3 text-white" />
                   </button>
                 </div>
               ))}
-              <label className="flex flex-col items-center justify-center w-24 h-24 border-2 border-dashed border-gray-300 rounded-md cursor-pointer hover:border-primary">
-                <ImageIcon className="w-6 h-6 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground mt-1">Add Image</span>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  className="hidden"
-                  onChange={handleImageChange}
-                  disabled={imageFiles.length >= 5}
-                />
-              </label>
+
+              {imageFiles.length < 5 && (
+                <label className="flex-shrink-0 flex flex-col items-center justify-center w-24 h-24 border-2 border-dashed border-gray-300 rounded-md cursor-pointer hover:border-primary transition-colors">
+                  <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground mt-1">Add Image</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    multiple
+                    className="hidden"
+                    onChange={handleImageChange}
+                  />
+                </label>
+              )}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Supported formats: JPEG, PNG, WEBP. Max size: 5MB each.
+
+            <p className="text-xs text-muted-foreground">
+              Supported formats: JPEG, PNG, WEBP · Max 5MB each
             </p>
           </div>
 
@@ -259,5 +261,4 @@ const NewListingModal = ({ onProductAdded }) => {
     </Dialog>
   );
 };
-
 export default NewListingModal;

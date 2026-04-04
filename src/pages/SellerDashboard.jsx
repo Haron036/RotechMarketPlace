@@ -6,15 +6,25 @@ import Footer from "../components/Footer";
 import { Button } from "../components/ui/button";
 import NewListingModal from "../components/NewListingModal";
 import { useToast } from "../components/ui/use-toast";
+import { useCart } from "../context/CartContext";
 
 const API_BASE = "http://localhost:8080/api";
+const IMG_BASE = "http://localhost:8080";
+
+// Safely resolves a stored image path to a full URL
+const getImageUrl = (path) => {
+  if (!path) return null;
+  if (path.startsWith("http")) return path;
+  return `${IMG_BASE}${path}`;
+};
 
 const SellerDashboard = () => {
-  const [listings, setListings] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [listings, setListings]     = useState([]);
+  const [loading, setLoading]       = useState(true);
   const [deletingId, setDeletingId] = useState(null);
   const [sellerName, setSellerName] = useState("Seller");
-  const { toast } = useToast();
+  const { toast }       = useToast();
+  const { formatPrice } = useCart();
 
   // ─── Fetch seller's products ──────────────────────────────
   const fetchMyProducts = useCallback(async () => {
@@ -43,7 +53,7 @@ const SellerDashboard = () => {
     fetchMyProducts();
   }, [fetchMyProducts]);
 
-  // ─── Delete a product ─────────────────────────────────────
+  // ─── Soft-delete a product ────────────────────────────────
   const handleDelete = async (productId) => {
     const token = localStorage.getItem("jwt_token");
     setDeletingId(productId);
@@ -71,7 +81,7 @@ const SellerDashboard = () => {
   };
 
   // ─── Compute dynamic stats from real data ─────────────────
-  const totalRevenue = listings.reduce((sum, p) => sum + (p.price ?? 0), 0);
+  const totalRevenueUSD = listings.reduce((sum, p) => sum + (p.price ?? 0), 0);
   const avgRating =
     listings.length > 0
       ? (listings.reduce((sum, p) => sum + (p.rating ?? 0), 0) / listings.length).toFixed(1)
@@ -79,27 +89,27 @@ const SellerDashboard = () => {
 
   const stats = [
     {
-      label: "Total Revenue",
-      value: `$${totalRevenue.toFixed(2)}`,
-      icon: DollarSign,
+      label:  "Total Revenue",
+      value:  formatPrice(totalRevenueUSD),
+      icon:   DollarSign,
       change: listings.length > 0 ? "+active" : "0",
     },
     {
-      label: "Active Listings",
-      value: listings.length,
-      icon: Package,
+      label:  "Active Listings",
+      value:  listings.length,
+      icon:   Package,
       change: listings.length > 0 ? `+${listings.length}` : "0",
     },
     {
-      label: "Total Stock",
-      value: listings.reduce((sum, p) => sum + (p.stock ?? 0), 0),
-      icon: TrendingUp,
+      label:  "Total Stock",
+      value:  listings.reduce((sum, p) => sum + (p.stock ?? 0), 0),
+      icon:   TrendingUp,
       change: "+live",
     },
     {
-      label: "Avg Rating",
-      value: avgRating,
-      icon: Star,
+      label:  "Avg Rating",
+      value:  avgRating,
+      icon:   Star,
       change: "+0.0",
     },
   ];
@@ -191,14 +201,22 @@ const SellerDashboard = () => {
                         {/* Product Name + Thumbnail */}
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
-                            {product.images?.[0] && (
-                              <img
-                                src={product.images[0]}
-                                alt={product.name}
-                                className="w-10 h-10 rounded-lg object-cover border border-border"
-                                onError={(e) => { e.target.style.display = "none"; }}
-                              />
-                            )}
+                            <div className="w-10 h-10 rounded-lg border border-border overflow-hidden flex-shrink-0 bg-secondary flex items-center justify-center">
+                              {getImageUrl(product.images?.[0]) ? (
+                                <img
+                                  src={getImageUrl(product.images[0])}
+                                  alt={product.name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    e.target.style.display = "none";
+                                    e.target.parentElement.innerHTML =
+                                      `<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`;
+                                  }}
+                                />
+                              ) : (
+                                <Package className="w-4 h-4 text-muted-foreground" />
+                              )}
+                            </div>
                             <span className="text-sm font-bold text-foreground">{product.name}</span>
                           </div>
                         </td>
@@ -218,7 +236,7 @@ const SellerDashboard = () => {
                         </td>
 
                         <td className="px-5 py-4 text-sm font-bold text-foreground text-right">
-                          ${product.price?.toFixed(2) ?? "0.00"}
+                          {formatPrice(product.price ?? 0)}
                         </td>
 
                         {/* Delete Action */}

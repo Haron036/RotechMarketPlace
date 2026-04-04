@@ -1,22 +1,33 @@
 export const currencies = [
-  { code: "USD", symbol: "$", rate: 1 },
-  { code: "EUR", symbol: "€", rate: 0.92 },
-  { code: "GBP", symbol: "£", rate: 0.79 },
-  { code: "JPY", symbol: "¥", rate: 149.5 },
-  { code: "CAD", symbol: "C$", rate: 1.36 },
-  { code: "AUD", symbol: "A$", rate: 1.53 },
-  { code: "INR", symbol: "₹", rate: 83.12 },
+  { code: "USD", symbol: "$",   rate: 1      },
+  { code: "EUR", symbol: "€",   rate: 0.92   },
+  { code: "GBP", symbol: "£",   rate: 0.79   },
+  { code: "JPY", symbol: "¥",   rate: 149.5  },
+  { code: "CAD", symbol: "C$",  rate: 1.36   },
+  { code: "AUD", symbol: "A$",  rate: 1.53   },
+  { code: "INR", symbol: "₹",   rate: 83.12  },
+  { code: "KES", symbol: "KSh", rate: 129.0  },
+  { code: "NGN", symbol: "₦",   rate: 1550.0 },
+  { code: "KRW", symbol: "₩",   rate: 1325.0 },
+  { code: "MAD", symbol: "MAD", rate: 9.97   },
+  { code: "DKK", symbol: "kr",  rate: 6.88   },
+  { code: "CNY", symbol: "¥",   rate: 7.24   },
+  { code: "BRL", symbol: "R$",  rate: 4.97   },
+  { code: "MXN", symbol: "MX$", rate: 17.15  },
+  { code: "ZAR", symbol: "R",   rate: 18.63  },
+  { code: "AED", symbol: "د.إ", rate: 3.67   },
+  { code: "SAR", symbol: "﷼",   rate: 3.75   },
 ];
 
 export const categories = [
-  { id: "electronics", name: "Electronics", icon: "💻", count: 2450 },
-  { id: "fashion", name: "Fashion", icon: "👗", count: 5200 },
-  { id: "home", name: "Home & Garden", icon: "🏡", count: 3100 },
-  { id: "art", name: "Art & Crafts", icon: "🎨", count: 1800 },
-  { id: "jewelry", name: "Jewelry", icon: "💎", count: 2900 },
-  { id: "vintage", name: "Vintage", icon: "🕰️", count: 1400 },
-  { id: "sports", name: "Sports", icon: "⚽", count: 2100 },
-  { id: "books", name: "Books", icon: "📚", count: 3800 },
+  { id: "electronics", name: "Electronics",  icon: "💻", count: 2450 },
+  { id: "fashion",     name: "Fashion",       icon: "👗", count: 5200 },
+  { id: "home",        name: "Home & Garden", icon: "🏡", count: 3100 },
+  { id: "art",         name: "Art & Crafts",  icon: "🎨", count: 1800 },
+  { id: "jewelry",     name: "Jewelry",       icon: "💎", count: 2900 },
+  { id: "vintage",     name: "Vintage",       icon: "🕰️", count: 1400 },
+  { id: "sports",      name: "Sports",        icon: "⚽", count: 2100 },
+  { id: "books",       name: "Books",         icon: "📚", count: 3800 },
 ];
 
 export const products = [
@@ -162,8 +173,8 @@ export const products = [
 ];
 
 export const reviews = [
-  { id: "r1", productId: "1", userName: "Sarah M.", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=50", rating: 5, comment: "Absolutely stunning! The craftsmanship is incredible.", date: "2024-03-15" },
-  { id: "r2", productId: "1", userName: "James K.", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50", rating: 4, comment: "Beautiful vase, slightly smaller than expected but lovely quality.", date: "2024-03-10" },
-  { id: "r3", productId: "2", userName: "Elena R.", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=50", rating: 5, comment: "The leather quality is outstanding. Worth every penny.", date: "2024-03-12" },
-  { id: "r4", productId: "3", userName: "Tom W.", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=50", rating: 5, comment: "Best noise cancellation I've experienced. Incredible sound.", date: "2024-03-18" },
+  { id: "r1", productId: "1", userName: "Sarah M.",  avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=50", rating: 5, comment: "Absolutely stunning! The craftsmanship is incredible.",                           date: "2024-03-15" },
+  { id: "r2", productId: "1", userName: "James K.",  avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50", rating: 4, comment: "Beautiful vase, slightly smaller than expected but lovely quality.",             date: "2024-03-10" },
+  { id: "r3", productId: "2", userName: "Elena R.",  avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=50", rating: 5, comment: "The leather quality is outstanding. Worth every penny.",                       date: "2024-03-12" },
+  { id: "r4", productId: "3", userName: "Tom W.",    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=50", rating: 5, comment: "Best noise cancellation I've experienced. Incredible sound.",                  date: "2024-03-18" },
 ];
