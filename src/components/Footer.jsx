@@ -33,7 +33,7 @@ const Footer = () => {
 
         <div className="border-t border-primary-foreground/10 pt-8 grid grid-cols-2 md:grid-cols-4 gap-8">
           <div>
-            <h4 className="font-serif text-lg mb-3">RotechMarketplace</h4>
+            <h4 className="font-serif text-lg mb-3">GlobalMarketplace</h4>
             <p className="text-xs opacity-60 leading-relaxed">
               The global marketplace connecting artisans and creators with buyers worldwide.
             </p>
@@ -56,7 +56,7 @@ const Footer = () => {
         </div>
 
         <div className="border-t border-primary-foreground/10 mt-8 pt-6 text-center">
-          <p className="text-xs opacity-40">© 2026 RotechMarketplace. All rights reserved.</p>
+          <p className="text-xs opacity-40">© 2026 GlobalMarketplace. All rights reserved.</p>
         </div>
       </div>
     </footer>

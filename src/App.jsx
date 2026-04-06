@@ -2,16 +2,12 @@ import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 
-// UI Providers and Components
 import { ToastProvider } from "./components/ui/toast";
 import { Toaster } from "./components/ui/toaster";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { CartProvider } from "./context/CartContext";
-
-// Protected Route Guards
 import { ProtectedRoute, SellerRoute } from "./components/ProtectedRoute";
 
-// Pages
 import Index from "./pages/Index";
 import Products from "./pages/Products";
 import ProductDetail from "./pages/ProductDetail";
@@ -19,6 +15,9 @@ import Cart from "./pages/Cart";
 import Auth from "./pages/Auth";
 import SellerDashboard from "./pages/SellerDashboard";
 import NotFound from "./pages/NotFound";
+import PaymentSuccess from "./pages/PaymentSuccess"; // ← NEW
+import PaymentCancel from "./pages/PaymentCancel"; // ← NEW
+import MyOrders from "./pages/MyOrders";
 
 const queryClient = new QueryClient();
 
@@ -29,7 +28,6 @@ const App = () => {
         <ToastProvider>
           <CartProvider>
             <Toaster />
-
             <BrowserRouter>
               <Routes>
                 {/* Public Routes */}
@@ -38,12 +36,24 @@ const App = () => {
                 <Route path="/product/:id" element={<ProductDetail />} />
                 <Route path="/auth" element={<Auth />} />
 
+                {/* PayPal Return Routes - must be public */}
+                <Route path="/payment/success" element={<PaymentSuccess />} />
+                <Route path="/payment/cancel" element={<PaymentCancel />} />
+
                 {/* Protected - any logged in user */}
                 <Route
                   path="/cart"
                   element={
                     <ProtectedRoute>
                       <Cart />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/my-orders"
+                  element={
+                    <ProtectedRoute>
+                      <MyOrders />
                     </ProtectedRoute>
                   }
                 />

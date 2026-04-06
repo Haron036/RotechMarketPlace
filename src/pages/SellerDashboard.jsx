@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Package, DollarSign, TrendingUp, Star, CheckCircle, Loader2, Trash2 } from "lucide-react";
+import {
+  Package, DollarSign, TrendingUp, Star, CheckCircle,
+  Loader2, Trash2, ShoppingBag, ChevronDown
+} from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { Button } from "../components/ui/button";
@@ -11,22 +14,45 @@ import { useCart } from "../context/CartContext";
 const API_BASE = "http://localhost:8080/api";
 const IMG_BASE = "http://localhost:8080";
 
-// Safely resolves a stored image path to a full URL
 const getImageUrl = (path) => {
   if (!path) return null;
   if (path.startsWith("http")) return path;
   return `${IMG_BASE}${path}`;
 };
 
+// ─── Status badge colors ──────────────────────────────────────────────────────
+const STATUS_STYLES = {
+  PENDING:   "bg-yellow-500/10 text-yellow-600",
+  CONFIRMED: "bg-blue-500/10 text-blue-600",
+  SHIPPED:   "bg-purple-500/10 text-purple-600",
+  DELIVERED: "bg-emerald-500/10 text-emerald-600",
+  CANCELLED: "bg-red-500/10 text-red-500",
+  COMPLETED: "bg-emerald-500/10 text-emerald-600",
+};
+
+// What transitions are allowed per status
+const NEXT_STATUSES = {
+  PENDING:   ["CONFIRMED", "CANCELLED"],
+  CONFIRMED: ["SHIPPED",   "CANCELLED"],
+  SHIPPED:   ["DELIVERED"],
+  DELIVERED: [],
+  CANCELLED: [],
+  COMPLETED: [],
+};
+
 const SellerDashboard = () => {
+  const [activeTab, setActiveTab]   = useState("listings"); // "listings" | "orders"
   const [listings, setListings]     = useState([]);
+  const [orders, setOrders]         = useState([]);
   const [loading, setLoading]       = useState(true);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
   const [sellerName, setSellerName] = useState("Seller");
   const { toast }       = useToast();
   const { formatPrice } = useCart();
 
-  // ─── Fetch seller's products ──────────────────────────────
+  // ─── Fetch seller's products ──────────────────────────────────────────────
   const fetchMyProducts = useCallback(async () => {
     setLoading(true);
     const token = localStorage.getItem("jwt_token");
@@ -35,15 +61,34 @@ const SellerDashboard = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
-        const data = await response.json();
-        setListings(data);
+        setListings(await response.json());
       } else if (response.status === 403) {
         toast({ variant: "destructive", title: "Access Denied", description: "Only sellers can view this page." });
       }
-    } catch (error) {
+    } catch {
       toast({ variant: "destructive", title: "Error", description: "Could not load listings." });
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // ─── Fetch seller's orders ────────────────────────────────────────────────
+  const fetchSellerOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    const token = localStorage.getItem("jwt_token");
+    try {
+      const response = await fetch(`${API_BASE}/orders/seller`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        setOrders(await response.json());
+      } else {
+        toast({ variant: "destructive", title: "Error", description: "Could not load orders." });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Error", description: "Could not load orders." });
+    } finally {
+      setOrdersLoading(false);
     }
   }, []);
 
@@ -51,9 +96,10 @@ const SellerDashboard = () => {
     const session = JSON.parse(localStorage.getItem("user_session"));
     if (session?.name) setSellerName(session.name);
     fetchMyProducts();
-  }, [fetchMyProducts]);
+    fetchSellerOrders();
+  }, [fetchMyProducts, fetchSellerOrders]);
 
-  // ─── Soft-delete a product ────────────────────────────────
+  // ─── Delete product ───────────────────────────────────────────────────────
   const handleDelete = async (productId) => {
     const token = localStorage.getItem("jwt_token");
     setDeletingId(productId);
@@ -68,56 +114,71 @@ const SellerDashboard = () => {
       } else {
         throw new Error("Failed to delete");
       }
-    } catch (error) {
+    } catch {
       toast({ variant: "destructive", title: "Error", description: "Could not delete listing." });
     } finally {
       setDeletingId(null);
     }
   };
 
-  // ─── Handle new product added from modal ──────────────────
-  const handleProductAdded = (newProduct) => {
-    setListings((prev) => [newProduct, ...prev]);
+  // ─── Update order status ──────────────────────────────────────────────────
+  const handleStatusUpdate = async (orderId, newStatus) => {
+    const token = localStorage.getItem("jwt_token");
+    setUpdatingId(orderId);
+    try {
+      const response = await fetch(`${API_BASE}/orders/${orderId}/status`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (response.ok) {
+        // Update order in local state without refetching
+        setOrders((prev) =>
+          prev.map((o) => o.id === orderId ? { ...o, status: newStatus } : o)
+        );
+        toast({
+          title: "Order Updated",
+          description: `Order #${orderId} marked as ${newStatus}`,
+        });
+      } else {
+        const err = await response.text();
+        toast({ variant: "destructive", title: "Update Failed", description: err });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Error", description: "Could not update order." });
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
-  // ─── Compute dynamic stats from real data ─────────────────
-  const totalRevenueUSD = listings.reduce((sum, p) => sum + (p.price ?? 0), 0);
-  const avgRating =
-    listings.length > 0
-      ? (listings.reduce((sum, p) => sum + (p.rating ?? 0), 0) / listings.length).toFixed(1)
-      : "0.0";
+  const handleProductAdded = (newProduct) => setListings((prev) => [newProduct, ...prev]);
+
+  // ─── Stats ────────────────────────────────────────────────────────────────
+  const completedOrders = orders.filter((o) =>
+    ["CONFIRMED", "SHIPPED", "DELIVERED", "COMPLETED"].includes(o.status)
+  );
+  const totalRevenue = completedOrders.reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
+  const avgRating = listings.length > 0
+    ? (listings.reduce((sum, p) => sum + (p.rating ?? 0), 0) / listings.length).toFixed(1)
+    : "0.0";
 
   const stats = [
-    {
-      label:  "Total Revenue",
-      value:  formatPrice(totalRevenueUSD),
-      icon:   DollarSign,
-      change: listings.length > 0 ? "+active" : "0",
-    },
-    {
-      label:  "Active Listings",
-      value:  listings.length,
-      icon:   Package,
-      change: listings.length > 0 ? `+${listings.length}` : "0",
-    },
-    {
-      label:  "Total Stock",
-      value:  listings.reduce((sum, p) => sum + (p.stock ?? 0), 0),
-      icon:   TrendingUp,
-      change: "+live",
-    },
-    {
-      label:  "Avg Rating",
-      value:  avgRating,
-      icon:   Star,
-      change: "+0.0",
-    },
+    { label: "Total Revenue",   value: formatPrice(totalRevenue), icon: DollarSign, change: `${completedOrders.length} orders` },
+    { label: "Active Listings", value: listings.length,           icon: Package,    change: `+${listings.length}` },
+    { label: "Total Stock",     value: listings.reduce((sum, p) => sum + (p.stock ?? 0), 0), icon: TrendingUp, change: "+live" },
+    { label: "Avg Rating",      value: avgRating,                 icon: Star,       change: "+0.0" },
   ];
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
+
+        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div>
             <h1 className="font-serif text-3xl text-foreground">Seller Dashboard</h1>
@@ -126,11 +187,10 @@ const SellerDashboard = () => {
               <CheckCircle className="w-3 h-3 text-primary" />
             </div>
           </div>
-
           <NewListingModal onProductAdded={handleProductAdded} />
         </div>
 
-        {/* Stats Grid */}
+        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {stats.map((stat, i) => (
             <motion.div
@@ -154,65 +214,76 @@ const SellerDashboard = () => {
           ))}
         </div>
 
-        {/* Listings Table */}
-        <div className="rounded-xl bg-card border border-border overflow-hidden shadow-sm">
-          <div className="p-5 border-b border-border flex justify-between items-center">
-            <h3 className="font-serif text-xl text-foreground">Your Active Listings</h3>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs text-primary"
-              onClick={fetchMyProducts}
-              disabled={loading}
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6 border-b border-border">
+          {[
+            { id: "listings", label: "My Listings", icon: Package },
+            { id: "orders",   label: "Orders",      icon: ShoppingBag,
+              badge: orders.filter(o => o.status === "CONFIRMED" || o.status === "PENDING").length },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                activeTab === tab.id
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
             >
-              {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Refresh"}
-            </Button>
-          </div>
-          <div className="overflow-x-auto">
-            {loading ? (
-              <div className="flex justify-center p-10">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              </div>
-            ) : (
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-secondary/30 border-b border-border">
-                    <th className="text-left text-xs font-bold uppercase tracking-wider text-muted-foreground px-5 py-4">Product</th>
-                    <th className="text-left text-xs font-bold uppercase tracking-wider text-muted-foreground px-5 py-4">Category</th>
-                    <th className="text-left text-xs font-bold uppercase tracking-wider text-muted-foreground px-5 py-4">Stock</th>
-                    <th className="text-left text-xs font-bold uppercase tracking-wider text-muted-foreground px-5 py-4">Status</th>
-                    <th className="text-right text-xs font-bold uppercase tracking-wider text-muted-foreground px-5 py-4">Price</th>
-                    <th className="text-right text-xs font-bold uppercase tracking-wider text-muted-foreground px-5 py-4">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {listings.length === 0 ? (
-                    <tr>
-                      <td colSpan="6" className="px-5 py-10 text-center text-sm text-muted-foreground italic">
-                        No active listings found. Create one to get started!
-                      </td>
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+              {tab.badge > 0 && (
+                <span className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {tab.badge}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* ── LISTINGS TAB ───────────────────────────────────────────────────── */}
+        {activeTab === "listings" && (
+          <div className="rounded-xl bg-card border border-border overflow-hidden shadow-sm">
+            <div className="p-5 border-b border-border flex justify-between items-center">
+              <h3 className="font-serif text-xl text-foreground">Your Active Listings</h3>
+              <Button variant="ghost" size="sm" className="text-xs text-primary"
+                onClick={fetchMyProducts} disabled={loading}>
+                {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Refresh"}
+              </Button>
+            </div>
+            <div className="overflow-x-auto">
+              {loading ? (
+                <div className="flex justify-center p-10">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-secondary/30 border-b border-border">
+                      {["Product", "Category", "Stock", "Status", "Price", "Actions"].map((h, i) => (
+                        <th key={h} className={`text-xs font-bold uppercase tracking-wider text-muted-foreground px-5 py-4 ${i >= 4 ? "text-right" : "text-left"}`}>
+                          {h}
+                        </th>
+                      ))}
                     </tr>
-                  ) : (
-                    listings.map((product) => (
-                      <tr
-                        key={product.id}
-                        className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors group"
-                      >
-                        {/* Product Name + Thumbnail */}
+                  </thead>
+                  <tbody>
+                    {listings.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="px-5 py-10 text-center text-sm text-muted-foreground italic">
+                          No active listings found. Create one to get started!
+                        </td>
+                      </tr>
+                    ) : listings.map((product) => (
+                      <tr key={product.id}
+                        className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors group">
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-lg border border-border overflow-hidden flex-shrink-0 bg-secondary flex items-center justify-center">
                               {getImageUrl(product.images?.[0]) ? (
-                                <img
-                                  src={getImageUrl(product.images[0])}
-                                  alt={product.name}
+                                <img src={getImageUrl(product.images[0])} alt={product.name}
                                   className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    e.target.style.display = "none";
-                                    e.target.parentElement.innerHTML =
-                                      `<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`;
-                                  }}
-                                />
+                                  onError={(e) => { e.target.style.display = "none"; }} />
                               ) : (
                                 <Package className="w-4 h-4 text-muted-foreground" />
                               )}
@@ -220,48 +291,148 @@ const SellerDashboard = () => {
                             <span className="text-sm font-bold text-foreground">{product.name}</span>
                           </div>
                         </td>
-
-                        <td className="px-5 py-4 text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-                          {product.category || "General"}
-                        </td>
-
-                        <td className="px-5 py-4 text-sm text-muted-foreground">
-                          {product.stock ?? 0} units
-                        </td>
-
+                        <td className="px-5 py-4 text-sm text-muted-foreground">{product.category || "General"}</td>
+                        <td className="px-5 py-4 text-sm text-muted-foreground">{product.stock ?? 0} units</td>
                         <td className="px-5 py-4">
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-tighter bg-emerald-500/10 text-emerald-600">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-600">
                             Live
                           </span>
                         </td>
-
                         <td className="px-5 py-4 text-sm font-bold text-foreground text-right">
                           {formatPrice(product.price ?? 0)}
                         </td>
-
-                        {/* Delete Action */}
                         <td className="px-5 py-4 text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                          <Button variant="ghost" size="sm"
                             className="text-red-500 hover:text-red-700 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity"
                             onClick={() => handleDelete(product.id)}
-                            disabled={deletingId === product.id}
-                          >
+                            disabled={deletingId === product.id}>
                             {deletingId === product.id
                               ? <Loader2 className="w-4 h-4 animate-spin" />
-                              : <Trash2 className="w-4 h-4" />
-                            }
+                              : <Trash2 className="w-4 h-4" />}
                           </Button>
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── ORDERS TAB ─────────────────────────────────────────────────────── */}
+        {activeTab === "orders" && (
+          <div className="rounded-xl bg-card border border-border overflow-hidden shadow-sm">
+            <div className="p-5 border-b border-border flex justify-between items-center">
+              <h3 className="font-serif text-xl text-foreground">Customer Orders</h3>
+              <Button variant="ghost" size="sm" className="text-xs text-primary"
+                onClick={fetchSellerOrders} disabled={ordersLoading}>
+                {ordersLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Refresh"}
+              </Button>
+            </div>
+
+            {ordersLoading ? (
+              <div className="flex justify-center p-10">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : orders.length === 0 ? (
+              <div className="p-10 text-center text-sm text-muted-foreground italic">
+                No orders yet. Share your listings to start selling!
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-secondary/30 border-b border-border">
+                      {["Order ID", "Date", "Items", "Total", "Status", "Action"].map((h, i) => (
+                        <th key={h} className={`text-xs font-bold uppercase tracking-wider text-muted-foreground px-5 py-4 ${i >= 3 ? "text-right" : "text-left"}`}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((order) => {
+                      const nextStatuses = NEXT_STATUSES[order.status] ?? [];
+                      return (
+                        <tr key={order.id}
+                          className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors">
+                          {/* Order ID */}
+                          <td className="px-5 py-4 text-sm font-bold text-foreground">
+                            #{order.id}
+                          </td>
+
+                          {/* Date */}
+                          <td className="px-5 py-4 text-sm text-muted-foreground">
+                            {order.createdAt
+                              ? new Date(order.createdAt).toLocaleDateString("en-KE", {
+                                  day: "2-digit", month: "short", year: "numeric"
+                                })
+                              : "—"}
+                          </td>
+
+                          {/* Items */}
+                          <td className="px-5 py-4 text-sm text-muted-foreground">
+                            <div className="flex flex-col gap-0.5">
+                              {order.items?.map((item, i) => (
+                                <span key={i} className="text-xs">
+                                  {item.quantity}× {item.product?.name ?? "Product"}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+
+                          {/* Total */}
+                          <td className="px-5 py-4 text-sm font-bold text-foreground text-right">
+                            {formatPrice(order.totalAmount ?? 0)}
+                          </td>
+
+                          {/* Status Badge */}
+                          <td className="px-5 py-4 text-right">
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${STATUS_STYLES[order.status] ?? "bg-secondary text-muted-foreground"}`}>
+                              {order.status}
+                            </span>
+                          </td>
+
+                          {/* Action — dropdown of next valid statuses */}
+                          <td className="px-5 py-4 text-right">
+                            {nextStatuses.length > 0 ? (
+                              <div className="relative inline-block">
+                                <select
+                                  className="text-xs border border-border rounded-lg px-3 py-1.5 bg-background text-foreground cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 appearance-none pr-7"
+                                  defaultValue=""
+                                  disabled={updatingId === order.id}
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleStatusUpdate(order.id, e.target.value);
+                                      e.target.value = "";
+                                    }
+                                  }}
+                                >
+                                  <option value="" disabled>Update →</option>
+                                  {nextStatuses.map((s) => (
+                                    <option key={s} value={s}>{s}</option>
+                                  ))}
+                                </select>
+                                {updatingId === order.id
+                                  ? <Loader2 className="w-3 h-3 animate-spin absolute right-2 top-2 text-muted-foreground" />
+                                  : <ChevronDown className="w-3 h-3 absolute right-2 top-2 text-muted-foreground pointer-events-none" />
+                                }
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
-        </div>
+        )}
+
       </div>
       <Footer />
     </div>

@@ -57,7 +57,7 @@ const Cart = () => {
     return path.startsWith("http") ? path : `${SERVER_URL}${path}`;
   };
 
-  // ─── Initiate checkout ────────────────────────────────────
+  // ─── Initiate checkout ────────────────
   const handleCheckout = async () => {
     const token = localStorage.getItem("jwt_token");
     if (!token) {
@@ -97,22 +97,28 @@ const Cart = () => {
       });
 
       const data = await response.json();
-
       if (!response.ok) throw new Error(data || "Payment failed");
 
-      // ── Handle each payment method response ──────────────
+      // ── STRIPE ──────────────────────────────────────────────
       if (selectedMethod === "STRIPE") {
         setStripeClientSecret(data.clientSecret);
         toast({ title: "Almost there!", description: "Complete your card payment below." });
       }
 
+      // ── PAYPAL ──────────────────────────────────────────────
+      // Backend returns approvalUrl — redirect the current tab so
+      // PayPal can send the user back to /payment/success
       if (selectedMethod === "PAYPAL") {
+        if (!data.approvalUrl) throw new Error("No PayPal approval URL received.");
         toast({ title: "Redirecting to PayPal...", description: "You will be redirected shortly." });
-        setTimeout(() => window.open(data.redirectUrl, "_blank"), 1000);
+        // Store orderId so PaymentSuccess can reference it
+        localStorage.setItem("paypal_order_id", data.orderId);
         clearCart();
-        navigate("/");
+        // Redirect in same tab so PayPal can return to /payment/success
+        setTimeout(() => { window.location.href = data.approvalUrl; }, 1000);
       }
 
+      // ── MPESA ───────────────────────────────────────────────
       if (selectedMethod === "MPESA") {
         toast({ title: "Check your phone!", description: data.message });
         clearCart();
@@ -126,24 +132,6 @@ const Cart = () => {
       setCheckingOut(false);
     }
   };
-
-  if (items.length === 0) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <div className="container mx-auto px-4 py-20 text-center">
-          <CartIcon className="w-16 h-16 mx-auto text-muted-foreground/30 mb-4" />
-          <h1 className="font-serif text-3xl text-foreground mb-2">Your cart is empty</h1>
-          <p className="text-muted-foreground text-sm mb-6">Discover unique products from around the world</p>
-          <Link to="/products">
-            <Button className="marketplace-gradient border-0 text-primary-foreground">Browse Products</Button>
-          </Link>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
