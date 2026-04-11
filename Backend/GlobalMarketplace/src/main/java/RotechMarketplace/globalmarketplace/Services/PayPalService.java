@@ -30,7 +30,7 @@ public class PayPalService {
     @Value("${paypal.receiver.email}")
     private String receiverEmail;                     // aronngetich544@gmail.com
 
-    @Value("${app.frontend-url:http://localhost:5173}")
+    @Value("${FRONTEND_URL:http://localhost:5173}")
     private String frontendUrl;
 
     private final RestTemplate restTemplate = new RestTemplate();
