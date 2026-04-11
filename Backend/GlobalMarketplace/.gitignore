@@ -31,7 +31,3 @@ build/
 
 ### VS Code ###
 .vscode/
-# Secrets - never commit these
-application.properties
-.env
-*.env
