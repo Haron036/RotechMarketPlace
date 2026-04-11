@@ -16,8 +16,6 @@ public class PayPalService {
 
     private static final Logger log = LoggerFactory.getLogger(PayPalService.class);
 
-    // ── Config ────────────────────────────────────────────────────────────────────
-
     @Value("${paypal.client.id}")
     private String clientId;
 
@@ -28,15 +26,21 @@ public class PayPalService {
     private String mode;
 
     @Value("${paypal.receiver.email}")
-    private String receiverEmail;                     // aronngetich544@gmail.com
+    private String receiverEmail;
 
     @Value("${FRONTEND_URL:http://localhost:5173}")
     private String frontendUrl;
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    // ── Helpers ───────────────────────────────────────────────────────────────────
+    // ── Strip trailing slash from frontendUrl ─────────────────────────────────
+    private String getBaseAppUrl() {
+        return frontendUrl.endsWith("/")
+                ? frontendUrl.substring(0, frontendUrl.length() - 1)
+                : frontendUrl;
+    }
 
+    // ── Helpers ───────────────────────────────────────────────────────────────
     private String getBaseUrl() {
         return "live".equalsIgnoreCase(mode)
                 ? "https://api-m.paypal.com"
@@ -50,8 +54,7 @@ public class PayPalService {
         return headers;
     }
 
-    // ── Step 1: OAuth Access Token ────────────────────────────────────────────────
-
+    // ── Step 1: OAuth Access Token ────────────────────────────────────────────
     public String getAccessToken() {
         String url = getBaseUrl() + "/v1/oauth2/token";
 
@@ -72,12 +75,7 @@ public class PayPalService {
         }
     }
 
-    // ── Step 2: Create Order (funds directed to YOUR PayPal account) ──────────────
-    //
-    //   The key field is purchase_units[].payee.email_address = receiverEmail.
-    //   PayPal routes the captured funds to that account.
-    //   custom_id stores your internal DB order ID so you can look it up on capture.
-
+    // ── Step 2: Create Order ──────────────────────────────────────────────────
     public Map<String, String> createOrder(Double amount, String currency, Long orderId) {
 
         if (amount == null || amount <= 0) {
@@ -87,39 +85,39 @@ public class PayPalService {
         String accessToken = getAccessToken();
         String url         = getBaseUrl() + "/v2/checkout/orders";
 
-        String returnUrl = frontendUrl + "/payment/success?orderId=" + orderId;
-        String cancelUrl = frontendUrl + "/payment/cancel?orderId=" + orderId;
+        // Use getBaseAppUrl() to avoid double slashes
+        String returnUrl = getBaseAppUrl() + "/payment/success?orderId=" + orderId;
+        String cancelUrl = getBaseAppUrl() + "/payment/cancel?orderId=" + orderId;
 
-        // ── Build purchase unit ───────────────────────────────────────────────────
+        log.info("[PayPal] Return URL: {}", returnUrl);
+        log.info("[PayPal] Cancel URL: {}", cancelUrl);
+
         Map<String, Object> amountMap = Map.of(
                 "currency_code", currency.toUpperCase(),
                 "value",         String.format("%.2f", amount)
         );
 
-        // payee = the merchant/seller who RECEIVES the money
         Map<String, Object> payee = Map.of(
-                "email_address", receiverEmail         // → aronngetich544@gmail.com
+                "email_address", receiverEmail
         );
 
         Map<String, Object> purchaseUnit = new LinkedHashMap<>();
         purchaseUnit.put("reference_id", "rotech-order-" + orderId);
         purchaseUnit.put("description",  "Rotech Marketplace Order #" + orderId);
-        purchaseUnit.put("custom_id",    String.valueOf(orderId));   // used on capture
+        purchaseUnit.put("custom_id",    String.valueOf(orderId));
         purchaseUnit.put("amount",       amountMap);
         purchaseUnit.put("payee",        payee);
 
-        // ── Application context ───────────────────────────────────────────────────
         Map<String, Object> appContext = Map.of(
                 "brand_name",      "Rotech Marketplace",
                 "locale",          "en-US",
-                "user_action",     "PAY_NOW",           // button label on PayPal page
+                "user_action",     "PAY_NOW",
                 "return_url",      returnUrl,
                 "cancel_url",      cancelUrl
         );
 
-        // ── Full request body ─────────────────────────────────────────────────────
         Map<String, Object> body = Map.of(
-                "intent",              "CAPTURE",       // capture funds immediately on approval
+                "intent",              "CAPTURE",
                 "purchase_units",      List.of(purchaseUnit),
                 "application_context", appContext
         );
@@ -149,8 +147,7 @@ public class PayPalService {
         }
     }
 
-    // ── Step 3: Capture Payment ───────────────────────────────────────────────────
-
+    // ── Step 3: Capture Payment ───────────────────────────────────────────────
     public Map<?, ?> captureOrder(String paypalOrderId) {
         if (paypalOrderId == null || paypalOrderId.isBlank()) {
             throw new IllegalArgumentException("PayPal Order ID must not be blank.");
@@ -169,7 +166,6 @@ public class PayPalService {
             return responseBody;
 
         } catch (HttpClientErrorException | HttpServerErrorException e) {
-            // PayPal returns error details in the body even on 4xx/5xx
             String errorBody = e.getResponseBodyAsString();
             log.error("[PayPal] Capture HTTP error {}: {}", e.getStatusCode(), errorBody);
             throw new RuntimeException("PayPal capture failed: " + errorBody);
@@ -179,8 +175,8 @@ public class PayPalService {
             throw new RuntimeException("PayPal capture error: " + e.getMessage());
         }
     }
-    // ── Step 4: Get Order Details (optional — for verification/debugging) ─────────
 
+    // ── Step 4: Get Order Details ─────────────────────────────────────────────
     public Map<?, ?> getOrderDetails(String paypalOrderId) {
         String accessToken = getAccessToken();
         String url         = getBaseUrl() + "/v2/checkout/orders/" + paypalOrderId;
@@ -196,8 +192,7 @@ public class PayPalService {
         }
     }
 
-    // ── Private: Extract approval URL from PayPal links array ────────────────────
-
+    // ── Private: Extract approval URL ────────────────────────────────────────
     private String extractApprovalUrl(Map<?, ?> responseBody) {
         Object linksObj = responseBody.get("links");
         if (!(linksObj instanceof List)) {

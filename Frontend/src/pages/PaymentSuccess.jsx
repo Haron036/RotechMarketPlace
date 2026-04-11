@@ -172,7 +172,7 @@ const PaymentSuccess = () => {
                 <Button
                   variant="outline"
                   className="flex-1"
-                  onClick={() => navigate("/orders")}
+                  onClick={() => navigate("/my-orders")}
                 >
                   <ShoppingBag className="w-4 h-4 mr-2" />
                   My Orders
