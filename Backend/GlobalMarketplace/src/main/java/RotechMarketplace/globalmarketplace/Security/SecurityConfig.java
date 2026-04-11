@@ -33,27 +33,22 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configure(http))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() 
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/reviews/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/reviews/**").authenticated()
-
-                        // ← SPECIFIC PayPal/Mpesa public endpoints FIRST
                         .requestMatchers("/api/payments/paypal/capture").permitAll()
                         .requestMatchers("/api/payments/paypal/cancel").permitAll()
                         .requestMatchers("/api/payments/mpesa/callback").permitAll()
-
-                        // ← BROAD rules AFTER specific ones
                         .requestMatchers("/api/payments/**").authenticated()
                         .requestMatchers("/api/sell/**").hasRole("SELLER")
-                        .requestMatchers("/api/orders/**").authenticated()
                         .requestMatchers(HttpMethod.GET,  "/api/orders/seller").hasRole("SELLER")
                         .requestMatchers(HttpMethod.PUT,  "/api/orders/*/status").hasRole("SELLER")
                         .requestMatchers(HttpMethod.GET,  "/api/orders/my-orders").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/orders").authenticated()
                         .requestMatchers("/api/orders/**").authenticated()
-
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session
