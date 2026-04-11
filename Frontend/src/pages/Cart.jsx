@@ -15,8 +15,7 @@ import { useCart } from "../context/CartContext";
 import { Button } from "../components/ui/button";
 import { useToast } from "../components/ui/use-toast";
 
-const SERVER_URL = "http://localhost:8080";
-const API_BASE = `${SERVER_URL}/api`;
+import { API_BASE, IMG_BASE as SERVER_URL } from "../lib/config";
 
 // ─── Stripe publishable key ───────────────────────────────
 // The backend also returns this in the checkout response (publishableKey),

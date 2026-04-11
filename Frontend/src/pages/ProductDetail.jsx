@@ -20,9 +20,7 @@ import { useCart } from "../context/CartContext.jsx";
 import { Button } from "../components/ui/button.jsx";
 import { useToast } from "../components/ui/use-toast.js";
 
-// The base URL of your Spring Boot server
-const SERVER_URL = "http://localhost:8080";
-const API_BASE = `${SERVER_URL}/api`;
+import { API_BASE, IMG_BASE as SERVER_URL } from "../lib/config";
 
 const ProductDetail = () => {
   const { id } = useParams();

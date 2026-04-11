@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { API_BASE } from "../lib/config.js"
 import { useForm } from "react-hook-form";
 import {
   Dialog, DialogContent, DialogHeader,
@@ -170,7 +171,7 @@ const NewListingModal = ({ onProductAdded }) => {
       formData.append("product", JSON.stringify(productPayload));
       imageFiles.forEach(file => formData.append("images", file));
 
-      const response = await fetch("http://localhost:8080/api/products", {
+      const response = await fetch(`${API_BASE}/products`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${localStorage.getItem("jwt_token")}` },
         body: formData

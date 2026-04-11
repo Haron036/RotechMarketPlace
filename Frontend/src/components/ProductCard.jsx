@@ -5,6 +5,7 @@ import { useCart } from "../context/CartContext";
 import { motion } from "framer-motion";
 import { Button } from "./ui/button";
 import { useToast } from "./ui/use-toast";
+import { IMG_BASE } from "../lib/config";
 
 const ProductCard = ({ product, index = 0 }) => {
   const { formatPrice, addToCart } = useCart();
@@ -19,12 +20,12 @@ const ProductCard = ({ product, index = 0 }) => {
     "Unknown Seller";
 
   // ── Safely resolve first image ──────────────────────────────
-  const BASE_URL = "http://localhost:8080";
+  
 
   const imageUrl = product.images?.[0]
     ? product.images[0].startsWith("http")
       ? product.images[0] // external image (Pinterest etc.)
-      : BASE_URL + product.images[0] // local image
+      : IMG_BASE + product.images[0] // local image // local image
     : "/placeholder.jpg";
 
   // ── Safely resolve rating ───────────────────────────────────

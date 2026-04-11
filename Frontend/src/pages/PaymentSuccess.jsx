@@ -5,7 +5,7 @@ import { Button } from "../components/ui/button";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 
-const SERVER_URL = "http://localhost:8080";
+import { IMG_BASE as SERVER_URL } from "../lib/config";
 const REDIRECT_DELAY = 5; // seconds before auto-redirect on success
 
 const PaymentSuccess = () => {

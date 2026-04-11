@@ -11,8 +11,7 @@ import { Button } from "../components/ui/button";
 import { useToast } from "../components/ui/use-toast";
 import { useCart } from "../context/CartContext";
 
-const API_BASE = "http://localhost:8080/api";
-const IMG_BASE = "http://localhost:8080";
+import { API_BASE, IMG_BASE } from "../lib/config";
 
 const getImageUrl = (path) => {
   if (!path) return null;

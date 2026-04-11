@@ -9,7 +9,7 @@ import ProductCard from "../components/ProductCard";
 import { categories } from "../lib/mock-data.js"; // keep static categories
 import { Button } from "../components/ui/button.jsx";
 
-const API_BASE = "http://localhost:8080/api";
+import { API_BASE } from "../lib/config";
 
 const Index = () => {
   const [products, setProducts] = useState([]);

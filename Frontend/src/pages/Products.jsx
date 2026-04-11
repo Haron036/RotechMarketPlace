@@ -5,7 +5,7 @@ import Footer from "../components/Footer";
 import ProductCard from "../components/ProductCard";
 import { categories } from "../lib/mock-data.js"; // keep using static categories
 
-const API_BASE = "http://localhost:8080/api";
+import { API_BASE } from "../lib/config";
 
 const Products = () => {
   const [products, setProducts] = useState([]);

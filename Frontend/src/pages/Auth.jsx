@@ -6,7 +6,8 @@ import Navbar from "../components/Navbar";
 import { Button } from "../components/ui/button";
 import { useToast } from "../components/ui/use-toast.js";
 
-const API_URL = "http://localhost:8080/api/auth";
+import { API_BASE } from "../lib/config";
+const API_URL = `${API_BASE}/auth`;
 
 const Auth = () => {
   const navigate = useNavigate();

@@ -11,8 +11,8 @@ import NewListingModal from "../components/NewListingModal";
 import { useToast } from "../components/ui/use-toast";
 import { useCart } from "../context/CartContext";
 
-const API_BASE = "http://localhost:8080/api";
-const IMG_BASE = "http://localhost:8080";
+const API_BASE = import.meta.env.VITE_API_URL + "/api";
+const IMG_BASE = import.meta.env.VITE_API_URL;
 
 const getImageUrl = (path) => {
   if (!path) return null;
