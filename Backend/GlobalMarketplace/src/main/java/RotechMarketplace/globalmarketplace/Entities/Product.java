@@ -47,7 +47,7 @@ public class Product {
     private Double pickupLongitude;
     // ─────────────────────────────────────────────────────────────────────────
 
-    @ElementCollection
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "product_images", joinColumns = @JoinColumn(name = "product_id"))
     @Column(name = "image_url", length = 1000)
     private List<String> images;
