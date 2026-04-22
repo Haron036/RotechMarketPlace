@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
-
 public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
@@ -36,22 +35,20 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
 
-        // Check if email already exists
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
             return ResponseEntity.badRequest().body("Email already in use");
         }
 
-        // Build and save new user
         User user = new User();
         user.setName(request.getFullName());
         user.setEmail(request.getEmail());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(request.getRole().toUpperCase()); // Store as "BUYER" or "SELLER"
+        user.setRole(request.getRole().toUpperCase());
 
         userRepository.save(user);
 
-        // Generate token immediately after registration
-        String token = jwtUtils.generateToken(user.getEmail());
+        // ── CHANGED: pass role so it's embedded in the token ──
+        String token = jwtUtils.generateToken(user.getEmail(), user.getRole());
 
         return ResponseEntity.ok(new AuthResponse(
                 token,
@@ -65,7 +62,6 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody AuthRequest request) {
 
-        // Authenticate credentials
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         request.getEmail(),
@@ -73,12 +69,11 @@ public class AuthController {
                 )
         );
 
-        // Fetch user from DB to get name and role
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Generate JWT token
-        String token = jwtUtils.generateToken(user.getEmail());
+        // ── CHANGED: pass role so it's embedded in the token ──
+        String token = jwtUtils.generateToken(user.getEmail(), user.getRole());
 
         return ResponseEntity.ok(new AuthResponse(
                 token,
