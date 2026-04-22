@@ -20,7 +20,6 @@ const getImageUrl = (path) => {
   return `${IMG_BASE}${path}`;
 };
 
-// ─── Status badge colors ──────────────────────────────────────────────────────
 const STATUS_STYLES = {
   PENDING:          "bg-yellow-500/10 text-yellow-600",
   CONFIRMED:        "bg-blue-500/10 text-blue-600",
@@ -29,7 +28,6 @@ const STATUS_STYLES = {
   CANCELLED:        "bg-red-500/10 text-red-500",
 };
 
-// What transitions are allowed per status
 const NEXT_STATUSES = {
   PENDING:          ["CONFIRMED",        "CANCELLED"],
   CONFIRMED:        ["READY_FOR_PICKUP", "CANCELLED"],
@@ -47,14 +45,14 @@ const STATUS_LABELS = {
 };
 
 const SellerDashboard = () => {
-  const [activeTab, setActiveTab]   = useState("listings");
-  const [listings, setListings]     = useState([]);
-  const [orders, setOrders]         = useState([]);
-  const [loading, setLoading]       = useState(true);
+  const [activeTab, setActiveTab]         = useState("listings");
+  const [listings, setListings]           = useState([]);
+  const [orders, setOrders]               = useState([]);
+  const [loading, setLoading]             = useState(true);
   const [ordersLoading, setOrdersLoading] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);
-  const [updatingId, setUpdatingId] = useState(null);
-  const [sellerName, setSellerName] = useState("Seller");
+  const [deletingId, setDeletingId]       = useState(null);
+  const [updatingId, setUpdatingId]       = useState(null);
+  const [sellerName, setSellerName]       = useState("Seller");
   const { toast }       = useToast();
   const { formatPrice } = useCart();
 
@@ -68,9 +66,8 @@ const SellerDashboard = () => {
       });
       if (response.ok) {
         setListings(await response.json());
-      } else if (response.status === 403) {
-        toast({ variant: "destructive", title: "Access Denied", description: "Only sellers can view this page." });
       }
+      // ── REMOVED: 403 toast here — handled in useEffect guard below ──
     } catch {
       toast({ variant: "destructive", title: "Error", description: "Could not load listings." });
     } finally {
@@ -98,9 +95,20 @@ const SellerDashboard = () => {
     }
   }, [toast]);
 
+  // ─── CHANGED: guard against non-sellers before fetching ──────────────────
   useEffect(() => {
     const session = JSON.parse(localStorage.getItem("user_session"));
     if (session?.name) setSellerName(session.name);
+
+    if (session?.role !== "SELLER") {
+      toast({
+        variant: "destructive",
+        title: "Access Denied",
+        description: "Only sellers can view this page.",
+      });
+      return;
+    }
+
     fetchMyProducts();
     fetchSellerOrders();
   }, [fetchMyProducts, fetchSellerOrders]);
@@ -163,7 +171,7 @@ const SellerDashboard = () => {
 
   // ─── Stats ────────────────────────────────────────────────────────────────
   const completedOrders = orders.filter((o) =>
-    ["CONFIRMED", "READY_FOR_PICKUP","SHIPPED", "DELIVERED", "COMPLETED"].includes(o.status)
+    ["CONFIRMED", "READY_FOR_PICKUP", "SHIPPED", "DELIVERED", "COMPLETED"].includes(o.status)
   );
   const totalRevenue = completedOrders.reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
   const avgRating = listings.length > 0
@@ -177,14 +185,9 @@ const SellerDashboard = () => {
     { label: "Avg Rating",      value: avgRating,                 icon: Star,       change: "+0.0" },
   ];
 
-  // ─── Helper: build Google Maps URL ───────────────────────────────────────
   const buildMapsUrl = (lat, lng, address) => {
-    if (lat && lng) {
-      return `https://www.google.com/maps?q=${lat},${lng}`;
-    }
-    if (address) {
-      return `https://www.google.com/maps?q=${encodeURIComponent(address)}`;
-    }
+    if (lat && lng) return `https://www.google.com/maps?q=${lat},${lng}`;
+    if (address)    return `https://www.google.com/maps?q=${encodeURIComponent(address)}`;
     return null;
   };
 
@@ -313,16 +316,10 @@ const SellerDashboard = () => {
                             </div>
                           </td>
                           <td className="px-5 py-4 text-sm text-muted-foreground">{product.category || "General"}</td>
-
-                          {/* Pickup Location */}
                           <td className="px-5 py-4">
                             {productMapsUrl ? (
-                              <a 
-                                href={productMapsUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="flex items-center gap-1.5 text-xs text-orange-600 hover:text-orange-700 hover:underline max-w-[150px]"
-                              >
+                              <a href={productMapsUrl} target="_blank" rel="noreferrer"
+                                className="flex items-center gap-1.5 text-xs text-orange-600 hover:text-orange-700 hover:underline max-w-[150px]">
                                 <MapPin className="w-3 h-3 flex-shrink-0" />
                                 <span className="truncate">{product.pickupLocation}</span>
                               </a>
@@ -330,7 +327,6 @@ const SellerDashboard = () => {
                               <span className="text-xs text-muted-foreground italic">Not set</span>
                             )}
                           </td>
-
                           <td className="px-5 py-4 text-sm text-muted-foreground">{product.stock ?? 0} units</td>
                           <td className="px-5 py-4">
                             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-600">
@@ -400,17 +396,10 @@ const SellerDashboard = () => {
                         firstProduct?.pickupLongitude,
                         firstProduct?.pickupLocation
                       );
-
                       return (
                         <tr key={order.id}
                           className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors">
-
-                          {/* Order ID */}
-                          <td className="px-5 py-4 text-sm font-bold text-foreground">
-                            #{order.id}
-                          </td>
-
-                          {/* Date */}
+                          <td className="px-5 py-4 text-sm font-bold text-foreground">#{order.id}</td>
                           <td className="px-5 py-4 text-sm text-muted-foreground">
                             {order.createdAt
                               ? new Date(order.createdAt).toLocaleDateString("en-KE", {
@@ -418,8 +407,6 @@ const SellerDashboard = () => {
                                 })
                               : "—"}
                           </td>
-
-                          {/* Items */}
                           <td className="px-5 py-4 text-sm text-muted-foreground">
                             <div className="flex flex-col gap-0.5">
                               {order.items?.map((item, i) => (
@@ -429,16 +416,10 @@ const SellerDashboard = () => {
                               ))}
                             </div>
                           </td>
-
-                          {/* Pickup Location */}
                           <td className="px-5 py-4">
                             {mapsUrl ? (
-                              <a 
-                                href={mapsUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="flex items-center gap-1.5 text-xs text-orange-600 hover:text-orange-700 hover:underline"
-                              >
+                              <a href={mapsUrl} target="_blank" rel="noreferrer"
+                                className="flex items-center gap-1.5 text-xs text-orange-600 hover:text-orange-700 hover:underline">
                                 <MapPin className="w-3 h-3 flex-shrink-0" />
                                 <span className="max-w-[120px] truncate">
                                   {firstProduct?.pickupLocation ?? "View map"}
@@ -448,20 +429,14 @@ const SellerDashboard = () => {
                               <span className="text-xs text-muted-foreground italic">—</span>
                             )}
                           </td>
-
-                          {/* Total */}
                           <td className="px-5 py-4 text-sm font-bold text-foreground text-right">
                             {formatPrice(order.totalAmount ?? 0)}
                           </td>
-
-                          {/* Status Badge */}
                           <td className="px-5 py-4 text-right">
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${STATUS_STYLES[order.status] ?? "bg-secondary text-muted-foreground"}`}>
                               {STATUS_LABELS[order.status] ?? order.status}
                             </span>
                           </td>
-
-                          {/* Action — dropdown of next valid statuses */}
                           <td className="px-5 py-4 text-right">
                             {nextStatuses.length > 0 ? (
                               <div className="relative inline-block">
