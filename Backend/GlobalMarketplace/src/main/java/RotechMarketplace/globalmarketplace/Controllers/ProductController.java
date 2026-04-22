@@ -4,8 +4,9 @@ import RotechMarketplace.globalmarketplace.Entities.Product;
 import RotechMarketplace.globalmarketplace.Entities.User;
 import RotechMarketplace.globalmarketplace.Repositories.ProductRepository;
 import RotechMarketplace.globalmarketplace.Repositories.UserRepository;
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -13,12 +14,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/products")
@@ -27,14 +25,15 @@ public class ProductController {
 
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
+    private final Cloudinary cloudinary;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${app.upload.dir:uploads}")
-    private String uploadDir;
-
-    public ProductController(ProductRepository productRepository, UserRepository userRepository) {
+    public ProductController(ProductRepository productRepository,
+                             UserRepository userRepository,
+                             Cloudinary cloudinary) {
         this.productRepository = productRepository;
         this.userRepository = userRepository;
+        this.cloudinary = cloudinary;
     }
 
     @GetMapping
@@ -53,7 +52,6 @@ public class ProductController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // --- Create product with file uploads ---
     @PostMapping(consumes = "multipart/form-data")
     @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<Product> createProduct(
@@ -75,21 +73,11 @@ public class ProductController {
 
         for (MultipartFile file : images) {
             if (!file.isEmpty()) {
-
-                String originalName = file.getOriginalFilename();
-
-                String cleanName = originalName
-                        .replaceAll("\\s+", "_")
-                        .replaceAll("[^a-zA-Z0-9._-]", "");
-                cleanName = cleanName.substring(0, Math.min(50, cleanName.length())); // ← fixed
-
-                String fileName = savedProduct.getId() + "_" + UUID.randomUUID() + "_" + cleanName;
-
-                Path filePath = Paths.get(uploadDir, "products", fileName);
-                Files.createDirectories(filePath.getParent());
-                Files.write(filePath, file.getBytes());
-
-                String imageUrl = "/uploads/products/" + fileName;
+                Map uploadResult = cloudinary.uploader().upload(
+                        file.getBytes(),
+                        ObjectUtils.asMap("folder", "products")
+                );
+                String imageUrl = (String) uploadResult.get("secure_url");
                 imageUrls.add(imageUrl);
             }
         }
@@ -100,7 +88,6 @@ public class ProductController {
         return ResponseEntity.ok(savedProduct);
     }
 
-    // --- Update product ---
     @PutMapping(value = "/{id}", consumes = "multipart/form-data")
     @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<Product> updateProduct(
@@ -126,28 +113,27 @@ public class ProductController {
         existing.setTags(updated.getTags());
 
         if (newImages != null && !newImages.isEmpty()) {
-            List<String> newImageUrls = new ArrayList<>();
-
-            for (MultipartFile file : newImages) {
-                if (!file.isEmpty()) {
-
-                    String originalName = file.getOriginalFilename();
-
-                    String cleanName = originalName
-                            .replaceAll("\\s+", "_")
-                            .replaceAll("[^a-zA-Z0-9._-]", "");
-                    cleanName = cleanName.substring(0, Math.min(50, cleanName.length())); // ← fixed
-
-                    String fileName = existing.getId() + "_" + UUID.randomUUID() + "_" + cleanName;
-
-                    Path filePath = Paths.get(uploadDir, "products", fileName);
-                    Files.createDirectories(filePath.getParent());
-                    Files.write(filePath, file.getBytes());
-
-                    newImageUrls.add("/uploads/products/" + fileName);
+            // Delete old images from Cloudinary
+            if (existing.getImages() != null) {
+                for (String oldUrl : existing.getImages()) {
+                    try {
+                        // Extract public_id from URL: .../products/filename -> products/filename
+                        String publicId = extractPublicId(oldUrl);
+                        cloudinary.uploader().destroy(publicId, ObjectUtils.emptyMap());
+                    } catch (Exception ignored) {}
                 }
             }
 
+            List<String> newImageUrls = new ArrayList<>();
+            for (MultipartFile file : newImages) {
+                if (!file.isEmpty()) {
+                    Map uploadResult = cloudinary.uploader().upload(
+                            file.getBytes(),
+                            ObjectUtils.asMap("folder", "products")
+                    );
+                    newImageUrls.add((String) uploadResult.get("secure_url"));
+                }
+            }
             existing.setImages(newImageUrls);
         }
 
@@ -155,24 +141,22 @@ public class ProductController {
         return ResponseEntity.ok(saved);
     }
 
-    // --- Delete product ---
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<?> deleteProduct(@PathVariable Long id, Authentication auth) {
-
         return productRepository.findById(id).map(product -> {
 
             if (!product.getSeller().getEmail().equals(auth.getName())) {
                 return ResponseEntity.status(403).build();
             }
 
+            // Delete images from Cloudinary
             if (product.getImages() != null) {
                 for (String imageUrl : product.getImages()) {
                     try {
-                        String relativePath = imageUrl.replace("/uploads/products/", "");
-                        Path filePath = Paths.get(uploadDir, relativePath);
-                        Files.deleteIfExists(filePath);
-                    } catch (IOException ignored) {}
+                        String publicId = extractPublicId(imageUrl);
+                        cloudinary.uploader().destroy(publicId, ObjectUtils.emptyMap());
+                    } catch (Exception ignored) {}
                 }
             }
 
@@ -188,5 +172,28 @@ public class ProductController {
         User seller = userRepository.findByEmail(auth.getName())
                 .orElseThrow(() -> new RuntimeException("Seller not found"));
         return productRepository.findBySeller(seller);
+    }
+
+
+    private String extractPublicId(String imageUrl) {
+        // Find "/upload/" and take everything after it, strip version if present, strip extension
+        String marker = "/upload/";
+        int idx = imageUrl.indexOf(marker);
+        if (idx == -1) return imageUrl;
+
+        String afterUpload = imageUrl.substring(idx + marker.length());
+
+        // Strip version segment like "v1234567890/"
+        if (afterUpload.startsWith("v") && afterUpload.contains("/")) {
+            afterUpload = afterUpload.substring(afterUpload.indexOf("/") + 1);
+        }
+
+        // Strip file extension
+        int dotIdx = afterUpload.lastIndexOf(".");
+        if (dotIdx != -1) {
+            afterUpload = afterUpload.substring(0, dotIdx);
+        }
+
+        return afterUpload; // e.g. "products/abc"
     }
 }
