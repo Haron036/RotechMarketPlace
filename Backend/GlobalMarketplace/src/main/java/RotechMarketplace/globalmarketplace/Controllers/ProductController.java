@@ -40,14 +40,16 @@ public class ProductController {
     public List<Product> getAllProducts(
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String search) {
-        if (search != null) return productRepository.findByNameContainingIgnoreCase(search);
-        if (category != null) return productRepository.findByCategory(category);
-        return productRepository.findAll();
+        // Updated to use "AndDeletedFalse" methods to hide soft-deleted items from the marketplace
+        if (search != null) return productRepository.findByNameContainingIgnoreCaseAndDeletedFalse(search);
+        if (category != null) return productRepository.findByCategoryAndDeletedFalse(category);
+        return productRepository.findAllActive();
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<Product> getProduct(@PathVariable Long id) {
         return productRepository.findById(id)
+                .filter(product -> !product.isDeleted()) // Ensure we don't return a deleted product via direct ID
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -66,6 +68,7 @@ public class ProductController {
 
         product.setSeller(seller);
         product.setCurrency("USD");
+        product.setDeleted(false); // Ensure new products are active
 
         Product savedProduct = productRepository.save(product);
 
@@ -113,11 +116,9 @@ public class ProductController {
         existing.setTags(updated.getTags());
 
         if (newImages != null && !newImages.isEmpty()) {
-            // Delete old images from Cloudinary
             if (existing.getImages() != null) {
                 for (String oldUrl : existing.getImages()) {
                     try {
-                        // Extract public_id from URL: .../products/filename -> products/filename
                         String publicId = extractPublicId(oldUrl);
                         cloudinary.uploader().destroy(publicId, ObjectUtils.emptyMap());
                     } catch (Exception ignored) {}
@@ -150,17 +151,11 @@ public class ProductController {
                 return ResponseEntity.status(403).build();
             }
 
-            // Delete images from Cloudinary
-            if (product.getImages() != null) {
-                for (String imageUrl : product.getImages()) {
-                    try {
-                        String publicId = extractPublicId(imageUrl);
-                        cloudinary.uploader().destroy(publicId, ObjectUtils.emptyMap());
-                    } catch (Exception ignored) {}
-                }
-            }
+            // SOFT DELETE: Instead of repository.delete(), we flip the deleted flag.
+            // This bypasses FK constraint issues with existing orders.
+            product.setDeleted(true);
+            productRepository.save(product);
 
-            productRepository.delete(product);
             return ResponseEntity.ok().build();
 
         }).orElse(ResponseEntity.notFound().build());
@@ -171,29 +166,27 @@ public class ProductController {
     public List<Product> getMyProducts(Authentication auth) {
         User seller = userRepository.findByEmail(auth.getName())
                 .orElseThrow(() -> new RuntimeException("Seller not found"));
-        return productRepository.findBySeller(seller);
+        // Only show active products in the seller's active listing dashboard
+        return productRepository.findBySellerAndDeletedFalse(seller);
     }
 
 
     private String extractPublicId(String imageUrl) {
-        // Find "/upload/" and take everything after it, strip version if present, strip extension
         String marker = "/upload/";
         int idx = imageUrl.indexOf(marker);
         if (idx == -1) return imageUrl;
 
         String afterUpload = imageUrl.substring(idx + marker.length());
 
-        // Strip version segment like "v1234567890/"
         if (afterUpload.startsWith("v") && afterUpload.contains("/")) {
             afterUpload = afterUpload.substring(afterUpload.indexOf("/") + 1);
         }
 
-        // Strip file extension
         int dotIdx = afterUpload.lastIndexOf(".");
         if (dotIdx != -1) {
             afterUpload = afterUpload.substring(0, dotIdx);
         }
 
-        return afterUpload; // e.g. "products/abc"
+        return afterUpload;
     }
 }

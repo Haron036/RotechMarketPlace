@@ -45,6 +45,9 @@ public class Product {
 
     @Column(name = "pickup_longitude")
     private Double pickupLongitude;
+
+    @Column(name = "is_deleted", nullable = false)
+    private boolean deleted = false;
     // ─────────────────────────────────────────────────────────────────────────
 
     @ElementCollection(fetch = FetchType.EAGER)
