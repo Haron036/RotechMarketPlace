@@ -69,8 +69,15 @@ const SellerDashboard = () => {
       if (response.ok) {
         setListings(await response.json());
       } else if (response.status === 403) {
-        toast({ variant: "destructive", title: "Access Denied", description: "Only sellers can view this page." });
-      }
+    toast({ 
+        variant: "destructive", 
+        title: "Unauthorized", 
+        description: "You do not have seller permissions." 
+    });
+    // Redirect them away so they don't think they are logged in
+    window.location.href = "/"; 
+    return;
+}
     } catch {
       toast({ variant: "destructive", title: "Error", description: "Could not load listings." });
     } finally {
