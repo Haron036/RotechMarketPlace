@@ -1,15 +1,28 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import heroImg from "../assets/hero-marketplace.jpg";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import ProductCard from "../components/ProductCard";
-import { categories } from "../lib/mock-data.js"; // keep static categories
 import { Button } from "../components/ui/button.jsx";
 
 import { API_BASE } from "../lib/config";
+
+// ─── Icon map: add new DB category values here as needed ─────
+const CATEGORY_ICONS = {
+  electronics: "💻",
+  fashion:     "👗",
+  home:        "🏡",
+  "home & garden": "🏡",
+  art:         "🎨",
+  "art & crafts": "🎨",
+  jewelry:     "💎",
+  vintage:     "🕰️",
+  sports:      "⚽",
+  books:       "📚",
+};
 
 const Index = () => {
   const [products, setProducts] = useState([]);
@@ -35,6 +48,25 @@ const Index = () => {
     fetchProducts();
   }, []);
 
+  // ─── Derive categories dynamically from real product data ─
+  const categories = useMemo(() => {
+    const map = {};
+    products.forEach((p) => {
+      if (!p.category) return;
+      const key = p.category.toLowerCase();
+      if (!map[key]) {
+        map[key] = {
+          id:    key,
+          name:  p.category,
+          icon:  CATEGORY_ICONS[key] ?? "🛍️",
+          count: 0,
+        };
+      }
+      map[key].count++;
+    });
+    return Object.values(map).sort((a, b) => b.count - a.count);
+  }, [products]);
+
   // ─── Split into featured and trending ────────────────────
   const featured = products.slice(0, 4);
   const trending = products.slice(4, 8);
@@ -47,6 +79,19 @@ const Index = () => {
           <div className="aspect-square rounded-2xl bg-secondary" />
           <div className="h-3 bg-secondary rounded w-2/3" />
           <div className="h-3 bg-secondary rounded w-1/2" />
+        </div>
+      ))}
+    </div>
+  );
+
+  // ─── Category skeleton (shown while products load) ────────
+  const CategorySkeleton = () => (
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+      {[...Array(8)].map((_, i) => (
+        <div key={i} className="animate-pulse flex flex-col items-center p-4 rounded-xl bg-card border border-border space-y-2">
+          <div className="w-8 h-8 rounded-full bg-secondary" />
+          <div className="h-2.5 bg-secondary rounded w-14" />
+          <div className="h-2 bg-secondary rounded w-10" />
         </div>
       ))}
     </div>
@@ -100,29 +145,36 @@ const Index = () => {
       {/* Categories */}
       <section className="container mx-auto px-4 py-16">
         <h2 className="font-serif text-3xl text-foreground mb-8">Browse Categories</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-          {categories.map((cat, i) => (
-            <motion.div
-              key={cat.id}
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-            >
-              <Link
-                to={`/products?category=${cat.name}`}  // use name to match backend
-                className="flex flex-col items-center p-4 rounded-xl bg-card border border-border hover:border-primary/30 hover:shadow-md transition-all group"
+
+        {loading ? (
+          <CategorySkeleton />
+        ) : categories.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+            {categories.map((cat, i) => (
+              <motion.div
+                key={cat.id}
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
               >
-                <span className="text-2xl mb-2">{cat.icon}</span>
-                <span className="text-xs font-medium text-foreground group-hover:text-primary transition-colors">
-                  {cat.name}
-                </span>
-                <span className="text-[10px] text-muted-foreground">
-                  {cat.count.toLocaleString()} items
-                </span>
-              </Link>
-            </motion.div>
-          ))}
-        </div>
+                <Link
+                  to={`/products?category=${cat.name}`}
+                  className="flex flex-col items-center p-4 rounded-xl bg-card border border-border hover:border-primary/30 hover:shadow-md transition-all group"
+                >
+                  <span className="text-2xl mb-2">{cat.icon}</span>
+                  <span className="text-xs font-medium text-foreground group-hover:text-primary transition-colors text-center">
+                    {cat.name}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {cat.count.toLocaleString()} items
+                  </span>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground italic">No categories yet.</p>
+        )}
       </section>
 
       {/* Featured Products */}
