@@ -11,8 +11,8 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 @Service
-
 public class CustomUserDetailsService implements UserDetailsService {
+
     private final UserRepository userRepository;
 
     public CustomUserDetailsService(UserRepository userRepository) {
@@ -21,18 +21,26 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        // 1. Fetch user from database
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
-        System.out.println("DEBUG: Loading user " + user.getEmail());
-        System.out.println("DEBUG: Raw role from DB: [" + user.getRole() + "]");
-        System.out.println("DEBUG: Granted Authority being set: [ROLE_" + user.getRole() + "]");
 
+        // 2. Sanitize the role (Ensure it's uppercase and has no hidden spaces)
+        String rawRole = user.getRole() != null ? user.getRole().trim().toUpperCase() : "USER";
+        String authority = "ROLE_" + rawRole;
+
+        // 3. Debugging logs for Render console
+        System.out.println("--- Spring Security Debug ---");
+        System.out.println("Authenticating: " + user.getEmail());
+        System.out.println("DB Role Found: [" + user.getRole() + "]");
+        System.out.println("Final Authority: [" + authority + "]");
+        System.out.println("-----------------------------");
+
+        // 4. Return the UserDetails object used by Spring Security
         return new org.springframework.security.core.userdetails.User(
                 user.getEmail(),
-
                 user.getPassword(),
-                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole()))
-
+                List.of(new SimpleGrantedAuthority(authority))
         );
     }
 }
