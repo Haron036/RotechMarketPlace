@@ -39,7 +39,9 @@ public class SecurityConfig {
                             "https://rotechmarketplace.onrender.com"
                     ));
                     config.setAllowedMethods(java.util.List.of("GET","POST","PUT","DELETE","OPTIONS"));
-                    config.setAllowedHeaders(java.util.List.of("*"));
+                    config.setAllowedHeaders(java.util.List.of("Authorization", "Content-Type", "Cache-Control", "X-Requested-With"));
+                    config.setExposedHeaders(java.util.List.of("Authorization"));
+                    config.setAllowCredentials(true);
                     config.setAllowCredentials(true);
                     return config;
                 }))
