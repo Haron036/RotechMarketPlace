@@ -11,12 +11,14 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
 @Component
-
 public class JwtAuthFilter extends OncePerRequestFilter {
+    private static final Logger logger = LoggerFactory.getLogger(JwtAuthFilter.class);
     private final JwtUtils jwtUtils;
     private final UserDetailsService userDetailsService;
 
@@ -30,50 +32,47 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         try {
-            // 1. Extract JWT from the Authorization header
             String jwt = parseJwt(request);
 
-            // 2. Validate token and set authentication in context
             if (jwt != null && jwtUtils.validateToken(jwt)) {
                 String email = jwtUtils.getEmailFromToken(jwt);
-                System.out.println("DEBUG: JWT Validated for: " + email);
 
-                UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+                // Only authenticate if not already authenticated in this context
+                if (SecurityContextHolder.getContext().getAuthentication() == null) {
+                    UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(
-                                userDetails,
-                                null,
-                                userDetails.getAuthorities()
-                        );
+                    // Log authorities to verify ROLE_SELLER is present
+                    System.out.println("DEBUG: Authenticating " + email + " with authorities: " + userDetails.getAuthorities());
 
-                authentication.setDetails(
-                        new WebAuthenticationDetailsSource().buildDetails(request)
-                );
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(
+                                    userDetails,
+                                    null,
+                                    userDetails.getAuthorities()
+                            );
 
-                // 3. Tell Spring Security this request is authenticated
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-            }
-            else {
-                System.out.println("DEBUG: JWT was either NULL or INVALID");
+                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
+            } else if (request.getRequestURI().startsWith("/api/products") && "POST".equalsIgnoreCase(request.getMethod())) {
+                // Specific debug for your failing endpoint
+                System.out.println("DEBUG: Auth failed for POST /api/products. JWT present? " + (jwt != null));
             }
         } catch (Exception e) {
-            logger.error("Cannot set user authentication: {}", e);
+            logger.error("Cannot set user authentication: {}", e.getMessage());
         }
 
-        // 4. Continue the filter chain
         filterChain.doFilter(request, response);
     }
 
-    // Extracts token from "Authorization: Bearer <token>" header
     private String parseJwt(HttpServletRequest request) {
         String headerAuth = request.getHeader("Authorization");
 
-        if (headerAuth != null && headerAuth.startsWith("Bearer ")) {
-            return headerAuth.substring(7); // Strip "Bearer " prefix
+        // Use .trim() to catch hidden spaces and handle case-insensitivity just in case
+        if (headerAuth != null && headerAuth.regionMatches(true, 0, "Bearer ", 0, 7)) {
+            return headerAuth.substring(7).trim();
         }
 
         return null;
     }
-
 }

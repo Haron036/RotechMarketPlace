@@ -149,16 +149,27 @@ const NewListingModal = ({ onProductAdded }) => {
 
   // --- Form Submission ---
   const onSubmit = async (data) => {
-  // ... (validation checks)
+  // Defensive check for location
+  if (!locationData.address) {
+    return toast({ 
+      variant: "destructive", 
+      title: "Location required", 
+      description: "Please select a pickup location." 
+    });
+  }
 
   setIsSubmitting(true);
   try {
-    const token = localStorage.getItem("jwt_token");
+    // 1. Double-check the key matches your DevTools exactly
+    const token = localStorage.getItem("jwt_token"); 
+    
     if (!token) {
-      throw new Error("You must be logged in to create a listing.");
+      throw new Error("Session expired. Please log in again.");
     }
 
     const formData = new FormData();
+    
+    // 2. Prepare the product payload
     const productPayload = {
       name: data.name,
       price: parseFloat(data.price),
@@ -170,22 +181,34 @@ const NewListingModal = ({ onProductAdded }) => {
       pickupLongitude: locationData.lng,
     };
 
-    
+    // 3. Append JSON part as a Blob (Spring Boot requirement for @RequestPart)
     formData.append("product", new Blob([JSON.stringify(productPayload)], {
       type: 'application/json'
     }));
+    
+    // 4. Append images
+    if (imageFiles.length === 0) {
+      throw new Error("Please add at least one photo.");
+    }
 
-    imageFiles.forEach(file => formData.append("images", file));
+    imageFiles.forEach(file => {
+      formData.append("images", file);
+    });
 
+    // 5. The Fetch Call
     const response = await fetch(`${API_BASE}/products`, {
       method: "POST",
       headers: { 
-    
-    
-        "Authorization": `Bearer ${token}`
+        // DO NOT set Content-Type; the browser handles it for FormData
+        "Authorization": `Bearer ${token}`.trim() 
       },
       body: formData
     });
+
+    // 6. Handle specific 403 error for better debugging
+    if (response.status === 403) {
+      throw new Error("Access Denied: Ensure you are logged in as a Seller.");
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -196,8 +219,15 @@ const NewListingModal = ({ onProductAdded }) => {
     onProductAdded(result);
     toast({ title: "Success", description: "Your item is now live!" });
     setOpen(false);
+    clearForm(); // Reset state after success
+
   } catch (error) {
-    toast({ variant: "destructive", title: "Submission failed", description: error.message });
+    console.error("Submission Error:", error);
+    toast({ 
+      variant: "destructive", 
+      title: "Submission failed", 
+      description: error.message 
+    });
   } finally {
     setIsSubmitting(false);
   }
