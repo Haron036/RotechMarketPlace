@@ -55,7 +55,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
             else {
-                System.out.println("DEBUG: JWT was either NULL or INVALID"); 
+                System.out.println("DEBUG: JWT was either NULL or INVALID");
             }
         } catch (Exception e) {
             logger.error("Cannot set user authentication: {}", e);

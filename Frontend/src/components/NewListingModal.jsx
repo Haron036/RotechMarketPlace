@@ -149,46 +149,59 @@ const NewListingModal = ({ onProductAdded }) => {
 
   // --- Form Submission ---
   const onSubmit = async (data) => {
-    if (imageFiles.length === 0) {
-      return toast({ variant: "destructive", title: "Images required", description: "Please upload at least one photo." });
+  // ... (validation checks)
+
+  setIsSubmitting(true);
+  try {
+    const token = localStorage.getItem("jwt_token");
+    if (!token) {
+      throw new Error("You must be logged in to create a listing.");
     }
-    if (!locationData.address) {
-      return toast({ variant: "destructive", title: "Location required", description: "Please provide a pickup point." });
+
+    const formData = new FormData();
+    const productPayload = {
+      name: data.name,
+      price: parseFloat(data.price),
+      stock: parseInt(data.stock),
+      category: data.category,
+      description: data.description,
+      pickupLocation: locationData.address,
+      pickupLatitude: locationData.lat,
+      pickupLongitude: locationData.lng,
+    };
+
+    
+    formData.append("product", new Blob([JSON.stringify(productPayload)], {
+      type: 'application/json'
+    }));
+
+    imageFiles.forEach(file => formData.append("images", file));
+
+    const response = await fetch(`${API_BASE}/products`, {
+      method: "POST",
+      headers: { 
+    
+    
+        "Authorization": `Bearer ${token}`
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || "Failed to create product");
     }
 
-    setIsSubmitting(true);
-    try {
-      const formData = new FormData();
-      const productPayload = {
-        ...data,
-        price: parseFloat(data.price),
-        stock: parseInt(data.stock),
-        pickupLocation: locationData.address,
-        pickupLatitude: locationData.lat,
-        pickupLongitude: locationData.lng,
-      };
-
-      formData.append("product", JSON.stringify(productPayload));
-      imageFiles.forEach(file => formData.append("images", file));
-
-      const response = await fetch(`${API_BASE}/products`, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${localStorage.getItem("jwt_token")}` },
-        body: formData
-      });
-
-      if (!response.ok) throw new Error(await response.text() || "Failed to create product");
-
-      onProductAdded(await response.json());
-      toast({ title: "Success", description: "Your item is now live!" });
-      setOpen(false);
-    } catch (error) {
-      toast({ variant: "destructive", title: "Submission failed", description: error.message });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
+    const result = await response.json();
+    onProductAdded(result);
+    toast({ title: "Success", description: "Your item is now live!" });
+    setOpen(false);
+  } catch (error) {
+    toast({ variant: "destructive", title: "Submission failed", description: error.message });
+  } finally {
+    setIsSubmitting(false);
+  }
+};
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
