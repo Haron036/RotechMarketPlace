@@ -36,6 +36,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             // 2. Validate token and set authentication in context
             if (jwt != null && jwtUtils.validateToken(jwt)) {
                 String email = jwtUtils.getEmailFromToken(jwt);
+                System.out.println("DEBUG: JWT Validated for: " + email);
 
                 UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
@@ -52,6 +53,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
                 // 3. Tell Spring Security this request is authenticated
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+            }
+            else {
+                System.out.println("DEBUG: JWT was either NULL or INVALID"); 
             }
         } catch (Exception e) {
             logger.error("Cannot set user authentication: {}", e);
