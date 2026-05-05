@@ -39,10 +39,7 @@ const App = () => {
                 {/* PayPal Return Routes - must be public */}
                 <Route path="/payment/success" element={<PaymentSuccess />} />
                 <Route path="/payment/cancel" element={<PaymentCancel />} />
-                <Route
-                  path="/payment/flutterwave/callback"
-                  element={<PaymentSuccess />}
-                />
+
 
                 {/* Protected - any logged in user */}
                 <Route

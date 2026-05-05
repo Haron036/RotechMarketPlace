@@ -16,110 +16,68 @@ const PaymentSuccess = () => {
   const [message, setMessage]     = useState("");
   const [orderInfo, setOrderInfo] = useState(null);
   const [countdown, setCountdown] = useState(REDIRECT_DELAY);
-  const [gateway, setGateway]     = useState(""); // "PAYPAL" | "FLUTTERWAVE"
   const hasCaptured               = useRef(false);
   const countdownRef              = useRef(null);
 
-  // ── Detect gateway & capture ─────────────────────────────────────────────────
+  // ── Capture PayPal payment ────────────────────────────────────────────────────
   useEffect(() => {
     if (hasCaptured.current) return;
     hasCaptured.current = true;
 
-    // Flutterwave sends: ?status=successful&tx_ref=...&transaction_id=...
-    // PayPal sends:      ?token=PAYPAL_ORDER_ID
-    const flwStatus        = searchParams.get("status");
-    const flwTransactionId = searchParams.get("transaction_id");
-    const flwTxRef         = searchParams.get("tx_ref");
-    const paypalToken      = searchParams.get("token") ||
-                             searchParams.get("paypalOrderId") ||
-                             localStorage.getItem("paypal_order_id");
+    // PayPal appends ?token=PAYPAL_ORDER_ID to the return_url
+    const paypalOrderId =
+      searchParams.get("token") ||
+      searchParams.get("paypalOrderId") ||
+      localStorage.getItem("paypal_order_id");
 
-    if (flwTransactionId) {
-      setGateway("FLUTTERWAVE");
-      captureFlutterwave(flwStatus, flwTxRef, flwTransactionId);
-    } else if (paypalToken) {
-      setGateway("PAYPAL");
-      capturePayPal(paypalToken);
-    } else {
+    if (!paypalOrderId) {
       setStatus("failed");
       setMessage("Payment token not found. If you were charged, please contact support.");
-    }
-  }, []);
-
-  // ── Flutterwave capture ───────────────────────────────────────────────────────
-  const captureFlutterwave = async (flwStatus, txRef, transactionId) => {
-    if (flwStatus !== "successful") {
-      setStatus("failed");
-      setMessage("Payment was not completed on Flutterwave.");
       return;
     }
 
-    try {
-      const token = localStorage.getItem("jwt_token");
-      const res = await fetch(
-        `${API_BASE}/payments/flutterwave/callback?status=${flwStatus}&tx_ref=${txRef}&transaction_id=${transactionId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+    const capture = async () => {
+      try {
+        const token = localStorage.getItem("jwt_token");
+        const res = await fetch(
+          `${API_BASE}/payments/paypal/capture?paypalOrderId=${paypalOrderId}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization:  `Bearer ${token}`,
+            },
+          }
+        );
 
-      const text = await res.text();
-      let data = {};
-      try { data = JSON.parse(text); } catch { data = { message: text }; }
+        const text = await res.text();
+        let data = {};
+        try { data = JSON.parse(text); } catch { data = { message: text }; }
 
-      if (res.ok && data.status === "success") {
-        setStatus("success");
-        setMessage("Your card payment was completed and your order is confirmed.");
-        setOrderInfo({
-          orderId:  data.orderId || "—",
-          currency: "USD",
-        });
-        localStorage.removeItem("flw_order_id");
-      } else {
-        setStatus("failed");
-        setMessage(data.message || "We could not confirm your payment. Please contact support.");
-      }
-    } catch (err) {
-      setStatus("failed");
-      setMessage("A network error occurred while confirming your payment: " + err.message);
-    }
-  };
-
-  // ── PayPal capture ────────────────────────────────────────────────────────────
-  const capturePayPal = async (paypalOrderId) => {
-    try {
-      const token = localStorage.getItem("jwt_token");
-      const res = await fetch(
-        `${API_BASE}/payments/paypal/capture?paypalOrderId=${paypalOrderId}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
+        if (res.ok && data.status === "success") {
+          setStatus("success");
+          setMessage("Your PayPal payment was completed and your order is confirmed.");
+          setOrderInfo({
+            orderId:  data.orderId  || searchParams.get("orderId") || "—",
+            amount:   data.amount   || null,
+            currency: data.currency || "USD",
+          });
+          localStorage.removeItem("paypal_order_id");
+        } else {
+          setStatus("failed");
+          setMessage(
+            data.message ||
+            "We could not confirm your payment. Please contact support if you were charged."
+          );
         }
-      );
-
-      const text = await res.text();
-      let data = {};
-      try { data = JSON.parse(text); } catch { data = { message: text }; }
-
-      if (res.ok && data.status === "success") {
-        setStatus("success");
-        setMessage("Your PayPal payment was completed and your order is confirmed.");
-        setOrderInfo({
-          orderId:  data.orderId || searchParams.get("orderId") || "—",
-          amount:   data.amount  || null,
-          currency: data.currency || "USD",
-        });
-        localStorage.removeItem("paypal_order_id");
-      } else {
+      } catch (err) {
         setStatus("failed");
-        setMessage(data.message || "We could not confirm your payment. Please contact support if you were charged.");
+        setMessage("A network error occurred while confirming your payment: " + err.message);
       }
-    } catch (err) {
-      setStatus("failed");
-      setMessage("A network error occurred while confirming your payment: " + err.message);
-    }
-  };
+    };
+
+    capture();
+  }, []);
 
   // ── Auto-redirect countdown ───────────────────────────────────────────────────
   useEffect(() => {
@@ -137,9 +95,6 @@ const PaymentSuccess = () => {
     return () => clearInterval(countdownRef.current);
   }, [status, navigate]);
 
-  const gatewayLabel = gateway === "FLUTTERWAVE" ? "Card (Flutterwave)" : "PayPal";
-
-  // ── UI ────────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
@@ -152,7 +107,7 @@ const PaymentSuccess = () => {
               <Loader2 className="w-14 h-14 mx-auto text-primary animate-spin mb-5" />
               <h1 className="font-serif text-2xl text-foreground mb-2">Confirming Your Payment</h1>
               <p className="text-sm text-muted-foreground">
-                Please wait while we verify your transaction...
+                Please wait while we verify your PayPal transaction...
               </p>
             </>
           )}
@@ -185,7 +140,7 @@ const PaymentSuccess = () => {
                   )}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Payment Method</span>
-                    <span className="font-medium text-foreground">{gatewayLabel}</span>
+                    <span className="font-medium text-foreground">PayPal</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Status</span>
@@ -202,7 +157,10 @@ const PaymentSuccess = () => {
                 <Button variant="outline" className="flex-1" onClick={() => navigate("/my-orders")}>
                   <ShoppingBag className="w-4 h-4 mr-2" /> My Orders
                 </Button>
-                <Button className="flex-1 marketplace-gradient border-0 text-primary-foreground" onClick={() => navigate("/products")}>
+                <Button
+                  className="flex-1 marketplace-gradient border-0 text-primary-foreground"
+                  onClick={() => navigate("/products")}
+                >
                   Shop More <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
@@ -231,19 +189,26 @@ const PaymentSuccess = () => {
               <p className="text-sm text-muted-foreground mb-6">{message}</p>
 
               <div className="bg-secondary rounded-xl p-4 mb-6 text-left">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Need Help?</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                  Need Help?
+                </p>
                 <p className="text-xs text-muted-foreground">
                   If you were charged but see this message, please email us at{" "}
                   <a href="mailto:globalmarketplace36@gmail.com" className="text-primary underline">
                     globalmarketplace36@gmail.com
                   </a>{" "}
-                  with your transaction ID.
+                  with your PayPal transaction ID.
                 </p>
               </div>
 
               <div className="flex gap-3 justify-center">
-                <Button variant="outline" className="flex-1" onClick={() => navigate("/cart")}>Back to Cart</Button>
-                <Button className="flex-1 marketplace-gradient border-0 text-primary-foreground" onClick={() => navigate("/products")}>
+                <Button variant="outline" className="flex-1" onClick={() => navigate("/cart")}>
+                  Back to Cart
+                </Button>
+                <Button
+                  className="flex-1 marketplace-gradient border-0 text-primary-foreground"
+                  onClick={() => navigate("/products")}
+                >
                   Browse Products
                 </Button>
               </div>
