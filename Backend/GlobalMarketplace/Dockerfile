@@ -13,4 +13,3 @@ EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
 
 
-+231772123796
