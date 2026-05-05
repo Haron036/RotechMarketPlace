@@ -17,7 +17,7 @@ export const currencies = [
   { code: "ZAR", symbol: "R",   rate: 18.63  },
   { code: "AED", symbol: "د.إ", rate: 3.67   },
   { code: "SAR", symbol: "﷼",   rate: 3.75   },
-  { code: "NZD", symbol: "**", rate:0.58}
+  { code: "NZD", symbol: " NZ$ ", rate:0.58}
 ];
 
 export const categories = [
