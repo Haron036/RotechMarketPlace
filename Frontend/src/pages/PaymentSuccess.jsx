@@ -4,88 +4,126 @@ import { CheckCircle, Loader2, XCircle, ShoppingBag, ArrowRight } from "lucide-r
 import { Button } from "../components/ui/button";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { API_BASE } from "../lib/config";
 
-import { IMG_BASE as SERVER_URL } from "../lib/config";
-const REDIRECT_DELAY = 5; // seconds before auto-redirect on success
+const REDIRECT_DELAY = 5;
 
 const PaymentSuccess = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const [status, setStatus]       = useState("capturing"); // "capturing" | "success" | "failed"
+  const [status, setStatus]       = useState("capturing");
   const [message, setMessage]     = useState("");
-  const [orderInfo, setOrderInfo] = useState(null);        // holds order details on success
+  const [orderInfo, setOrderInfo] = useState(null);
   const [countdown, setCountdown] = useState(REDIRECT_DELAY);
-  const hasCaptured               = useRef(false);         // prevents double capture on React StrictMode
+  const [gateway, setGateway]     = useState(""); // "PAYPAL" | "FLUTTERWAVE"
+  const hasCaptured               = useRef(false);
   const countdownRef              = useRef(null);
 
-  // ── Capture Payment ──────────────────────────────────────────────────────────
+  // ── Detect gateway & capture ─────────────────────────────────────────────────
   useEffect(() => {
     if (hasCaptured.current) return;
     hasCaptured.current = true;
 
-    // PayPal appends ?token=PAYPAL_ORDER_ID to your return_url
-    // It may also come as ?paypalOrderId= depending on your backend redirect
-    const paypalOrderId =
-      searchParams.get("token") ||
-      searchParams.get("paypalOrderId") ||
-      localStorage.getItem("paypal_order_id");
+    // Flutterwave sends: ?status=successful&tx_ref=...&transaction_id=...
+    // PayPal sends:      ?token=PAYPAL_ORDER_ID
+    const flwStatus        = searchParams.get("status");
+    const flwTransactionId = searchParams.get("transaction_id");
+    const flwTxRef         = searchParams.get("tx_ref");
+    const paypalToken      = searchParams.get("token") ||
+                             searchParams.get("paypalOrderId") ||
+                             localStorage.getItem("paypal_order_id");
 
-    if (!paypalOrderId) {
+    if (flwTransactionId) {
+      setGateway("FLUTTERWAVE");
+      captureFlutterwave(flwStatus, flwTxRef, flwTransactionId);
+    } else if (paypalToken) {
+      setGateway("PAYPAL");
+      capturePayPal(paypalToken);
+    } else {
       setStatus("failed");
       setMessage("Payment token not found. If you were charged, please contact support.");
+    }
+  }, []);
+
+  // ── Flutterwave capture ───────────────────────────────────────────────────────
+  const captureFlutterwave = async (flwStatus, txRef, transactionId) => {
+    if (flwStatus !== "successful") {
+      setStatus("failed");
+      setMessage("Payment was not completed on Flutterwave.");
       return;
     }
 
-    const capture = async () => {
-      try {
-        const response = await fetch(
-          `${SERVER_URL}/api/payments/paypal/capture?paypalOrderId=${paypalOrderId}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-          }
-        );
+    try {
+      const token = localStorage.getItem("jwt_token");
+      const res = await fetch(
+        `${API_BASE}/payments/flutterwave/callback?status=${flwStatus}&tx_ref=${txRef}&transaction_id=${transactionId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-        // Safely parse response — backend may return plain text on errors
-        const text = await response.text();
-        let data = {};
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = { message: text };
-        }
+      const text = await res.text();
+      let data = {};
+      try { data = JSON.parse(text); } catch { data = { message: text }; }
 
-        if (response.ok && data.status === "success") {
-          setStatus("success");
-          setMessage("Your PayPal payment was completed and your order is confirmed.");
-          setOrderInfo({
-            orderId:   data.orderId   || searchParams.get("orderId") || "—",
-            amount:    data.amount    || null,
-            currency:  data.currency  || "USD",
-            buyerName: data.buyerName || null,
-          });
-          localStorage.removeItem("paypal_order_id");
-        } else {
-          setStatus("failed");
-          setMessage(
-            data.message ||
-            "We could not confirm your payment. Please contact support if you were charged."
-          );
-        }
-      } catch (err) {
+      if (res.ok && data.status === "success") {
+        setStatus("success");
+        setMessage("Your card payment was completed and your order is confirmed.");
+        setOrderInfo({
+          orderId:  data.orderId || "—",
+          currency: "USD",
+        });
+        localStorage.removeItem("flw_order_id");
+      } else {
         setStatus("failed");
-        setMessage("A network error occurred while confirming your payment: " + err.message);
+        setMessage(data.message || "We could not confirm your payment. Please contact support.");
       }
-    };
+    } catch (err) {
+      setStatus("failed");
+      setMessage("A network error occurred while confirming your payment: " + err.message);
+    }
+  };
 
-    capture();
-  }, []); // runs once only
+  // ── PayPal capture ────────────────────────────────────────────────────────────
+  const capturePayPal = async (paypalOrderId) => {
+    try {
+      const token = localStorage.getItem("jwt_token");
+      const res = await fetch(
+        `${API_BASE}/payments/paypal/capture?paypalOrderId=${paypalOrderId}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-  // ── Auto-redirect countdown after success ────────────────────────────────────
+      const text = await res.text();
+      let data = {};
+      try { data = JSON.parse(text); } catch { data = { message: text }; }
+
+      if (res.ok && data.status === "success") {
+        setStatus("success");
+        setMessage("Your PayPal payment was completed and your order is confirmed.");
+        setOrderInfo({
+          orderId:  data.orderId || searchParams.get("orderId") || "—",
+          amount:   data.amount  || null,
+          currency: data.currency || "USD",
+        });
+        localStorage.removeItem("paypal_order_id");
+      } else {
+        setStatus("failed");
+        setMessage(data.message || "We could not confirm your payment. Please contact support if you were charged.");
+      }
+    } catch (err) {
+      setStatus("failed");
+      setMessage("A network error occurred while confirming your payment: " + err.message);
+    }
+  };
+
+  // ── Auto-redirect countdown ───────────────────────────────────────────────────
   useEffect(() => {
     if (status !== "success") return;
-
     countdownRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
@@ -96,44 +134,38 @@ const PaymentSuccess = () => {
         return prev - 1;
       });
     }, 1000);
-
     return () => clearInterval(countdownRef.current);
   }, [status, navigate]);
 
-  // ── UI ───────────────────────────────────────────────────────────────────────
+  const gatewayLabel = gateway === "FLUTTERWAVE" ? "Card (Flutterwave)" : "PayPal";
+
+  // ── UI ────────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
-
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="bg-card border border-border rounded-2xl p-10 max-w-md w-full text-center">
 
-          {/* ── Capturing state ── */}
+          {/* Capturing */}
           {status === "capturing" && (
             <>
               <Loader2 className="w-14 h-14 mx-auto text-primary animate-spin mb-5" />
-              <h1 className="font-serif text-2xl text-foreground mb-2">
-                Confirming Your Payment
-              </h1>
+              <h1 className="font-serif text-2xl text-foreground mb-2">Confirming Your Payment</h1>
               <p className="text-sm text-muted-foreground">
-                Please wait while we verify your PayPal transaction...
+                Please wait while we verify your transaction...
               </p>
             </>
           )}
 
-          {/* ── Success state ── */}
+          {/* Success */}
           {status === "success" && (
             <>
               <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-5">
                 <CheckCircle className="w-9 h-9 text-emerald-500" />
               </div>
-
-              <h1 className="font-serif text-2xl text-foreground mb-1">
-                Payment Successful!
-              </h1>
+              <h1 className="font-serif text-2xl text-foreground mb-1">Payment Successful!</h1>
               <p className="text-sm text-muted-foreground mb-6">{message}</p>
 
-              {/* Order summary card */}
               {orderInfo && (
                 <div className="bg-secondary rounded-xl p-4 mb-6 text-left space-y-2">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
@@ -153,7 +185,7 @@ const PaymentSuccess = () => {
                   )}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Payment Method</span>
-                    <span className="font-medium text-foreground">PayPal</span>
+                    <span className="font-medium text-foreground">{gatewayLabel}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Status</span>
@@ -162,40 +194,25 @@ const PaymentSuccess = () => {
                 </div>
               )}
 
-              {/* Confirmation note */}
               <p className="text-xs text-muted-foreground mb-5">
                 A confirmation email has been sent to your registered email address.
               </p>
 
-              {/* Buttons */}
               <div className="flex gap-3 justify-center">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => navigate("/my-orders")}
-                >
-                  <ShoppingBag className="w-4 h-4 mr-2" />
-                  My Orders
+                <Button variant="outline" className="flex-1" onClick={() => navigate("/my-orders")}>
+                  <ShoppingBag className="w-4 h-4 mr-2" /> My Orders
                 </Button>
-                <Button
-                  className="flex-1 marketplace-gradient border-0 text-primary-foreground"
-                  onClick={() => navigate("/products")}
-                >
-                  Shop More
-                  <ArrowRight className="w-4 h-4 ml-2" />
+                <Button className="flex-1 marketplace-gradient border-0 text-primary-foreground" onClick={() => navigate("/products")}>
+                  Shop More <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
 
-              {/* Auto-redirect countdown */}
               <p className="text-xs text-muted-foreground mt-5">
-                Redirecting to products in{" "}
+                Redirecting in{" "}
                 <span className="font-semibold text-foreground">{countdown}s</span>
-                {" "}·{" "}
+                {" · "}
                 <button
-                  onClick={() => {
-                    clearInterval(countdownRef.current);
-                    setCountdown(0);
-                  }}
+                  onClick={() => { clearInterval(countdownRef.current); setCountdown(0); }}
                   className="underline hover:text-foreground transition-colors"
                 >
                   stay on page
@@ -204,48 +221,29 @@ const PaymentSuccess = () => {
             </>
           )}
 
-          {/* ── Failed state ── */}
+          {/* Failed */}
           {status === "failed" && (
             <>
               <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-5">
                 <XCircle className="w-9 h-9 text-destructive" />
               </div>
-
-              <h1 className="font-serif text-2xl text-foreground mb-1">
-                Payment Not Confirmed
-              </h1>
+              <h1 className="font-serif text-2xl text-foreground mb-1">Payment Not Confirmed</h1>
               <p className="text-sm text-muted-foreground mb-6">{message}</p>
 
-              {/* Support info */}
               <div className="bg-secondary rounded-xl p-4 mb-6 text-left">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                  Need Help?
-                </p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Need Help?</p>
                 <p className="text-xs text-muted-foreground">
                   If you were charged but see this message, please email us at{" "}
-                  <a
-                    href="mailto:globalmarketplace36@gmail.com"
-                    className="text-primary underline"
-                  >
+                  <a href="mailto:globalmarketplace36@gmail.com" className="text-primary underline">
                     globalmarketplace36@gmail.com
                   </a>{" "}
-                  with your PayPal transaction ID.
+                  with your transaction ID.
                 </p>
               </div>
 
-              {/* Buttons */}
               <div className="flex gap-3 justify-center">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => navigate("/cart")}
-                >
-                  Back to Cart
-                </Button>
-                <Button
-                  className="flex-1 marketplace-gradient border-0 text-primary-foreground"
-                  onClick={() => navigate("/products")}
-                >
+                <Button variant="outline" className="flex-1" onClick={() => navigate("/cart")}>Back to Cart</Button>
+                <Button className="flex-1 marketplace-gradient border-0 text-primary-foreground" onClick={() => navigate("/products")}>
                   Browse Products
                 </Button>
               </div>
@@ -254,14 +252,9 @@ const PaymentSuccess = () => {
 
         </div>
       </div>
-
       <Footer />
     </div>
   );
 };
 
 export default PaymentSuccess;
-
-
-
-
