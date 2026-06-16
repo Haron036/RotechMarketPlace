@@ -39,6 +39,10 @@ public class CustomerOrder {
     @Enumerated(EnumType.STRING)
     private OrderStatus status;
 
+    // Payment tracking
+    private String paymentMethod;     // "INTASEND" or "MPESA"
+    private String paymentReference;  // IntaSend tracking_id, or M-Pesa CheckoutRequestID
+
     private LocalDateTime createdAt;
 
     public enum OrderStatus {

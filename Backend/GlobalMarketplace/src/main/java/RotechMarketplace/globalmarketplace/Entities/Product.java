@@ -46,7 +46,7 @@ public class Product {
     @Column(name = "pickup_longitude")
     private Double pickupLongitude;
 
-    @Column(name = "is_deleted", nullable = false)
+    @Column(name = "is_deleted", nullable = false, columnDefinition = "boolean not null default false")
     private boolean deleted = false;
     // ─────────────────────────────────────────────────────────────────────────
 

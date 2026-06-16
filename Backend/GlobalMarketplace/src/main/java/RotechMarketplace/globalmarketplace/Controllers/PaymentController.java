@@ -10,12 +10,14 @@ import RotechMarketplace.globalmarketplace.Repositories.OrderRepository;
 import RotechMarketplace.globalmarketplace.Repositories.ProductRepository;
 import RotechMarketplace.globalmarketplace.Repositories.UserRepository;
 import RotechMarketplace.globalmarketplace.Services.EmailService;
-import RotechMarketplace.globalmarketplace.Services.MpesaService;
-import RotechMarketplace.globalmarketplace.Services.PayPalService;
+import RotechMarketplace.globalmarketplace.Services.UnifiedCheckoutService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,25 +27,24 @@ import java.util.Map;
 @CrossOrigin(origins = "*")
 public class PaymentController {
 
-    private final MpesaService     mpesaService;
-    private final PayPalService    payPalService;
-    private final OrderRepository  orderRepository;
-    private final ProductRepository productRepository;
-    private final UserRepository   userRepository;
-    private final EmailService     emailService;
+    private static final Logger log = LoggerFactory.getLogger(PaymentController.class);
 
-    public PaymentController(MpesaService mpesaService,
-                             PayPalService payPalService,
+    private final UnifiedCheckoutService unifiedCheckoutService;
+    private final OrderRepository orderRepository;
+    private final ProductRepository productRepository;
+    private final UserRepository userRepository;
+    private final EmailService emailService;
+
+    public PaymentController(UnifiedCheckoutService unifiedCheckoutService,
                              OrderRepository orderRepository,
                              ProductRepository productRepository,
                              UserRepository userRepository,
                              EmailService emailService) {
-        this.mpesaService        = mpesaService;
-        this.payPalService       = payPalService;
-        this.orderRepository     = orderRepository;
-        this.productRepository   = productRepository;
-        this.userRepository      = userRepository;
-        this.emailService        = emailService;
+        this.unifiedCheckoutService = unifiedCheckoutService;
+        this.orderRepository = orderRepository;
+        this.productRepository = productRepository;
+        this.userRepository = userRepository;
+        this.emailService = emailService;
     }
 
     // ─── CHECKOUT ENTRY POINT ─────────────────────────────────────────────────
@@ -54,130 +55,166 @@ public class PaymentController {
             User buyer = userRepository.findByEmail(auth.getName())
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
-            CustomerOrder order = buildOrder(buyer, request.getItems(), request.getAmount());
+            // Convert raw request pricing values over to safe BigDecimal representations
+            //  RIGHT: Just assign it directly since it's already a BigDecimal
+            BigDecimal baseUsdAmount = request.getAmount();
+
+            // Default tax parameter to 0 if not explicitly provided
+            BigDecimal taxRate = request.getTaxRate() != null ? BigDecimal.valueOf(request.getTaxRate()) : BigDecimal.ZERO;
+
+            // Persist order state inside the core marketplace records
+            CustomerOrder order = buildOrder(buyer, request.getItems(), baseUsdAmount);
             CustomerOrder savedOrder = orderRepository.save(order);
 
-            return switch (request.getPaymentMethod().toUpperCase()) {
-                case "PAYPAL" -> handlePayPal(request, savedOrder);
-                case "MPESA"  -> handleMpesa(request, savedOrder);
-                default       -> ResponseEntity.badRequest().body("Unsupported payment method");
-            };
-
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(e.getMessage());
-        }
-    }
-
-    // ─── PAYPAL ───────────────────────────────────────────────────────────────
-    private ResponseEntity<?> handlePayPal(PaymentRequest request,
-                                           CustomerOrder order) {
-        try {
+            String[] name = splitName(buyer.getName());
             String currency = request.getCurrency() != null ? request.getCurrency() : "USD";
-            Map<String, String> paypalData = payPalService.createOrder(
-                    request.getAmount(), currency, order.getId());
+            String country = request.getCountry() != null ? request.getCountry() : "KE";
+            String paymentMethod = request.getPaymentMethod().toUpperCase();
 
-            return ResponseEntity.ok(Map.of(
-                    "status",        "redirect",
-                    "paymentMethod", "PAYPAL",
-                    "approvalUrl",   paypalData.get("approvalUrl"),
-                    "paypalOrderId", paypalData.get("paypalOrderId"),
-                    "orderId",       order.getId()
-            ));
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError()
-                    .body("PayPal error: " + e.getMessage());
-        }
-    }
+            // Delegate calculation and orchestration parameters to the unified engine
+            Map<String, Object> gatewayResult = unifiedCheckoutService.processCheckout(
+                    baseUsdAmount,
+                    taxRate,
+                    savedOrder.getId(),
+                    buyer.getEmail(),
+                    name[0],
+                    name[1],
+                    country,
+                    request.getPhoneNumber(),
+                    paymentMethod
+            );
 
-    // Called by frontend after user returns from PayPal approval page
-    @PostMapping("/paypal/capture")
-    public ResponseEntity<?> capturePayPalPayment(@RequestParam String paypalOrderId) {
-        try {
-            Map<?, ?> result = payPalService.captureOrder(paypalOrderId);
-            String status = (String) result.get("status");
+            // Update order record tracking values
+            if ("MPESA".equalsIgnoreCase(paymentMethod)) {
+                String responseCode = String.valueOf(gatewayResult.get("ResponseCode"));
+                if ("0".equals(responseCode)) {
+                    savedOrder.setPaymentMethod("MPESA");
+                    savedOrder.setPaymentReference(String.valueOf(gatewayResult.get("CheckoutRequestID")));
+                    orderRepository.save(savedOrder);
 
-            if ("COMPLETED".equals(status)) {
-                List<Map<?, ?>> purchaseUnits = (List<Map<?, ?>>) result.get("purchase_units");
-                if (purchaseUnits != null && !purchaseUnits.isEmpty()) {
-                    String customId = (String) purchaseUnits.get(0).get("custom_id");
-                    if (customId != null) {
-                        Long orderId = Long.parseLong(customId);
-                        orderRepository.findById(orderId).ifPresent(order -> {
-                            order.setStatus(CustomerOrder.OrderStatus.CONFIRMED);
-                            orderRepository.save(order);
-                            emailService.sendOrderConfirmedEmail(
-                                    order.getBuyer().getEmail(),
-                                    order.getBuyer().getName() != null
-                                            ? order.getBuyer().getName() : "Customer",
-                                    order.getId(),
-                                    order.getTotalAmount()
-                            );
-                        });
-                    }
+                    return ResponseEntity.ok(Map.of(
+                            "status", "pending",
+                            "paymentMethod", "MPESA",
+                            "message", "STK Push sent. Please check your phone.",
+                            "checkoutRequestId", gatewayResult.get("CheckoutRequestID"),
+                            "orderId", savedOrder.getId()
+                    ));
+                } else {
+                    return ResponseEntity.badRequest()
+                            .body("M-Pesa execution failed: " + gatewayResult.get("ResponseDescription"));
                 }
+            } else {
+                // Handle fallback hosted checkout links via IntaSend
+                savedOrder.setPaymentMethod("INTASEND");
+                savedOrder.setPaymentReference(String.valueOf(gatewayResult.get("trackingId")));
+                orderRepository.save(savedOrder);
+
                 return ResponseEntity.ok(Map.of(
-                        "status",  "success",
-                        "message", "Payment captured successfully"
+                        "status", "redirect",
+                        "paymentMethod", "INTASEND",
+                        "checkoutUrl", gatewayResult.get("checkoutUrl"),
+                        "orderId", savedOrder.getId()
                 ));
             }
-            return ResponseEntity.badRequest()
-                    .body("Capture incomplete. PayPal status: " + status);
 
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
         } catch (Exception e) {
-            return ResponseEntity.internalServerError()
-                    .body("PayPal capture error: " + e.getMessage());
+            log.error("Global marketplace system checkout failure occurred", e);
+            return ResponseEntity.internalServerError().body("Checkout generation error: " + e.getMessage());
         }
     }
 
-    // PayPal redirects here if the user cancels
-    @GetMapping("/paypal/cancel")
-    public ResponseEntity<?> paypalCancel(@RequestParam Long orderId) {
-        return ResponseEntity.ok(Map.of(
-                "status",  "cancelled",
-                "message", "PayPal payment was cancelled.",
-                "orderId", orderId
-        ));
-    }
+    // ─── INTASEND WEBHOOK ─────────────────────────────────────────────────────
+    @PostMapping("/intasend/webhook")
+    public ResponseEntity<?> intasendWebhook(@RequestBody Map<String, Object> payload) {
+        log.info("[IntaSend] Processing webhook payload: {}", payload);
 
-    // ─── MPESA ────────────────────────────────────────────────────────────────
-    private ResponseEntity<?> handleMpesa(PaymentRequest request,
-                                          CustomerOrder order) {
-        Map<String, Object> result = mpesaService.stkPush(
-                request.getPhoneNumber(), request.getAmount());
+        Object stateObj = payload.get("state");
+        Object apiRefObj = payload.get("api_ref");
 
-        String responseCode = (String) result.get("ResponseCode");
-        if ("0".equals(responseCode)) {
-            return ResponseEntity.ok(Map.of(
-                    "status",            "pending",
-                    "paymentMethod",     "MPESA",
-                    "message",           "STK Push sent. Please check your phone.",
-                    "checkoutRequestId", result.get("CheckoutRequestID"),
-                    "orderId",           order.getId()
-            ));
+        if (stateObj == null || apiRefObj == null) {
+            return ResponseEntity.ok().build();
         }
-        return ResponseEntity.badRequest()
-                .body("M-Pesa request failed: " + result.get("ResponseDescription"));
-    }
 
-    @PostMapping("/mpesa/callback")
-    public ResponseEntity<?> mpesaCallback(@RequestBody Map<String, Object> payload) {
-        System.out.println("M-Pesa Callback: " + payload);
+        String state = String.valueOf(stateObj);
+        String apiRef = String.valueOf(apiRefObj);
+
+        // Aligned with modern system orchestration formats ('ORDER-101' instead of 'rotech-order-101')
+        if ("COMPLETE".equalsIgnoreCase(state) && apiRef.startsWith("ORDER-")) {
+            try {
+                Long orderId = Long.parseLong(apiRef.replace("ORDER-", ""));
+                orderRepository.findById(orderId).ifPresent(order -> {
+                    order.setStatus(CustomerOrder.OrderStatus.CONFIRMED);
+                    orderRepository.save(order);
+
+                    emailService.sendOrderConfirmedEmail(
+                            order.getBuyer().getEmail(),
+                            order.getBuyer().getName() != null ? order.getBuyer().getName() : "Customer",
+                            order.getId(),
+                            order.getTotalAmount()
+                    );
+                });
+            } catch (NumberFormatException e) {
+                log.warn("[IntaSend Webhook Sync Fail] Could not match reference tracking code: {}", apiRef);
+            }
+        }
         return ResponseEntity.ok().build();
     }
 
-    // ─── SHARED ORDER BUILDER ─────────────────────────────────────────────────
+    // ─── MPESA CALLBACK ───────────────────────────────────────────────────────
+    @PostMapping("/mpesa/callback")
+    public ResponseEntity<?> mpesaCallback(@RequestBody Map<String, Object> payload) {
+        log.info("[M-Pesa Callback Triggered] Processing structural data: {}", payload);
+
+        // Optionally parse Safaricom's transaction status arrays here to mark the order as CONFIRMED
+        return ResponseEntity.ok().build();
+    }
+
+    // ─── GET ORDER STATUS ─────────────────────────────────────────────────────
+    @GetMapping("/order-status/{orderId}")
+    public ResponseEntity<?> getOrderStatus(@PathVariable Long orderId, Authentication auth) {
+        User buyer = userRepository.findByEmail(auth.getName())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        CustomerOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        if (!order.getBuyer().getId().equals(buyer.getId())) {
+            return ResponseEntity.status(403).body("Forbidden");
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "orderId", order.getId(),
+                "status", order.getStatus().toString(),
+                "paymentMethod", order.getPaymentMethod() != null ? order.getPaymentMethod() : "",
+                "totalAmount", order.getTotalAmount()
+        ));
+    }
+
+    // ─── HELPERS ──────────────────────────────────────────────────────────────
+    private String[] splitName(String fullName) {
+        if (fullName == null || fullName.isBlank()) {
+            return new String[]{"Customer", ""};
+        }
+        String[] parts = fullName.trim().split("\\s+", 2);
+        return parts.length == 2 ? parts : new String[]{parts[0], ""};
+    }
+
+    // ─── ORDER STRUCTURAL BUILDER ─────────────────────────────────────────────
     private CustomerOrder buildOrder(User buyer,
                                      List<OrderRequest.OrderItemRequest> items,
-                                     Double totalAmount) {
+                                     BigDecimal baseUsdAmount) {
         CustomerOrder order = new CustomerOrder();
         order.setBuyer(buyer);
-        order.setTotalAmount(totalAmount);
+
+        // Map Double variables inside entities via Double values safely extracted from the base BigDecimal context
+        order.setTotalAmount(baseUsdAmount.doubleValue());
 
         List<OrderItem> orderItems = new ArrayList<>();
         for (OrderRequest.OrderItemRequest itemReq : items) {
             Product product = productRepository.findById(itemReq.getProductId())
-                    .orElseThrow(() -> new RuntimeException(
-                            "Product not found: " + itemReq.getProductId()));
+                    .orElseThrow(() -> new RuntimeException("Product not found: " + itemReq.getProductId()));
 
             product.setStock(product.getStock() - itemReq.getQuantity());
             productRepository.save(product);
