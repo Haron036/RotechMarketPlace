@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Trash2, ArrowLeft, Loader2, CreditCard, Smartphone } from "lucide-react";
+import { Trash2, ArrowLeft, Loader2, CreditCard, Smartphone, Globe } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import Navbar from "../components/Navbar";
@@ -11,11 +11,11 @@ import { API_BASE, IMG_BASE as SERVER_URL } from "../lib/config";
 
 // ─── Payment Method Icons ─────────────────────────────────
 const PaymentIcons = {
-  PAYPAL: () => (
-    <svg viewBox="0 0 100 32" className="h-6" fill="none">
-      <path d="M12 4h10c5 0 8 2.5 7 7.5C28 17 24 20 19 20h-3l-1.5 8H8L12 4z" fill="#003087" />
-      <path d="M20 4h10c5 0 8 2.5 7 7.5C36 17 32 20 27 20h-3l-1.5 8H16L20 4z" fill="#009CDE" />
-    </svg>
+  INTASEND: () => (
+    <div className="flex items-center gap-1">
+      <CreditCard className="w-5 h-5 text-primary" />
+      <span className="text-[10px] font-bold text-foreground">Card</span>
+    </div>
   ),
   MPESA: () => (
     <span className="text-green-600 font-black text-sm tracking-tight">M-PESA</span>
@@ -32,12 +32,13 @@ const Cart = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedMethod, setSelectedMethod]   = useState(null);
   const [mpesaPhone, setMpesaPhone]           = useState("");
+  const [billingCountry, setBillingCountry]   = useState(""); // Leave blank to support all countries equally
 
   const paymentMethods = [
     {
-      id:   "PAYPAL",
-      label: "PayPal",
-      desc:  "Pay with PayPal or any debit/credit card",
+      id:   "INTASEND",
+      label: "Card Payment",
+      desc:  "Visa, Mastercard & more — international",
     },
     {
       id:   "MPESA",
@@ -70,14 +71,27 @@ const Cart = () => {
       toast({ variant: "destructive", title: "Phone required", description: "Enter your M-Pesa phone number." });
       return;
     }
+    
+    // Strict ISO code validation check for international compatibility
+    if (selectedMethod === "INTASEND" && (!billingCountry || billingCountry.trim().length !== 2)) {
+      toast({ 
+        variant: "destructive", 
+        title: "Billing Country Required", 
+        description: "Please enter your 2-letter country code (e.g., KE, US, UG) to complete card verification." 
+      });
+      return;
+    }
 
     setCheckingOut(true);
     try {
+      const cleanedPhone = mpesaPhone.replace(/\s+/g, "").trim();
+
       const payload = {
         paymentMethod: selectedMethod,
         amount:        totalPrice,
         currency:      "USD",
-        phoneNumber:   mpesaPhone,
+        phoneNumber:   cleanedPhone,
+        country:       selectedMethod === "INTASEND" ? billingCountry.trim().toUpperCase() : "KE",
         items: items.map((item) => ({
           productId: item.product.id,
           quantity:  item.quantity,
@@ -95,27 +109,28 @@ const Cart = () => {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data || "Payment failed");
+      if (!response.ok) {
+        throw new Error(data.message || (typeof data === "string" ? data : "Payment setup failed"));
+      }
 
-      // ── PAYPAL ───────────────────────────────────────────
-      if (selectedMethod === "PAYPAL") {
-        if (!data.approvalUrl) throw new Error("No PayPal approval URL received.");
-        toast({ title: "Redirecting to PayPal...", description: "You will be redirected shortly." });
-        localStorage.setItem("paypal_order_id", data.orderId);
+      // ── INTASEND ─────────────────────────────────────────
+      if (selectedMethod === "INTASEND") {
+        if (!data.checkoutUrl) throw new Error("No secure checkout URL received from the server gateway.");
+        toast({ title: "Redirecting to secure gateway...", description: "Please complete your card details." });
         clearCart();
-        setTimeout(() => { window.location.href = data.approvalUrl; }, 1000);
+        setTimeout(() => { window.location.href = data.checkoutUrl; }, 1000);
       }
 
       // ── MPESA ────────────────────────────────────────────
       if (selectedMethod === "MPESA") {
-        toast({ title: "Check your phone!", description: data.message });
+        toast({ title: "Check your mobile device!", description: data.message || "STK Push sent successfully." });
         clearCart();
         setShowPaymentModal(false);
         navigate("/");
       }
 
     } catch (error) {
-      toast({ variant: "destructive", title: "Payment Failed", description: error.message });
+      toast({ variant: "destructive", title: "Checkout Error", description: error.message });
     } finally {
       setCheckingOut(false);
     }
@@ -264,6 +279,7 @@ const Cart = () => {
                   return (
                     <button
                       key={method.id}
+                      type="button"
                       onClick={() => setSelectedMethod(method.id)}
                       className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left ${
                         selectedMethod === method.id
@@ -284,45 +300,61 @@ const Cart = () => {
                 })}
               </div>
 
-              {/* PayPal note */}
-              <AnimatePresence>
-                {selectedMethod === "PAYPAL" && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                    className="mb-6 overflow-hidden"
-                  >
-                    <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
-                      <p className="text-xs text-blue-700">
-                        💳 No PayPal account needed — you can pay as a guest with any Visa or Mastercard on the next page.
-                      </p>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {/* Dynamic Forms */}
+              <div className="space-y-4 mb-6">
+                {/* IntaSend Card Networks (Universal Country Picker) */}
+                <AnimatePresence>
+                  {selectedMethod === "INTASEND" && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden space-y-3"
+                    >
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                          <Globe className="w-3.5 h-3.5 text-muted-foreground" /> Billing Country (2-Letter ISO Code)
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={2}
+                          placeholder="e.g. KE, US, GB, UG"
+                          value={billingCountry}
+                          onChange={(e) => setBillingCountry(e.target.value.toUpperCase())}
+                          className="w-full px-4 py-2.5 rounded-lg bg-secondary border-0 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 uppercase font-mono tracking-wider"
+                        />
+                      </div>
+                      <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
+                        <p className="text-xs text-blue-700 leading-relaxed">
+                          💳 Global card networks match your 2-letter billing country string against credit validation records to protect your profile against unauthorized transactions.
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-              {/* M-Pesa Phone Input */}
-              <AnimatePresence>
-                {selectedMethod === "MPESA" && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                    className="mb-6 overflow-hidden"
-                  >
-                    <label className="text-xs font-medium text-foreground block mb-1.5">
-                      M-Pesa Phone Number
-                    </label>
-                    <input
-                      type="tel"
-                      placeholder="e.g. 0712345678"
-                      value={mpesaPhone}
-                      onChange={(e) => setMpesaPhone(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-lg bg-secondary border-0 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    />
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      You will receive an STK push prompt on this number.
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                {/* M-Pesa Phone Input */}
+                <AnimatePresence>
+                  {selectedMethod === "MPESA" && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <label className="text-xs font-medium text-foreground block mb-1.5">
+                        M-Pesa Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        placeholder="e.g. 0712345678"
+                        value={mpesaPhone}
+                        onChange={(e) => setMpesaPhone(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-lg bg-secondary border-0 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        An STK Push authentication prompt will be sent directly to this phone line.
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
 
               {/* Action Buttons */}
               <div className="flex gap-3">
@@ -338,8 +370,8 @@ const Cart = () => {
                     <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Processing...</>
                   ) : selectedMethod === "MPESA" ? (
                     <><Smartphone className="w-4 h-4 mr-2" /> Pay via M-Pesa</>
-                  ) : selectedMethod === "PAYPAL" ? (
-                    <><CreditCard className="w-4 h-4 mr-2" /> Continue to PayPal</>
+                  ) : selectedMethod === "INTASEND" ? (
+                    <><CreditCard className="w-4 h-4 mr-2" /> Continue to Card</>
                   ) : (
                     "Pay Now"
                   )}

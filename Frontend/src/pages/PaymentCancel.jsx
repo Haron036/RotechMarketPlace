@@ -22,7 +22,7 @@ const PaymentCancel = () => {
 
           <h1 className="font-serif text-2xl text-foreground mb-2">Payment Cancelled</h1>
           <p className="text-sm text-muted-foreground mb-6">
-            You cancelled the PayPal payment. No charge was made.
+            Your payment was not completed and no charge was made.
             Your cart is still saved — you can complete your purchase anytime.
           </p>
 
