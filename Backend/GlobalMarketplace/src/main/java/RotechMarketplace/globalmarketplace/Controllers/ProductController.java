@@ -40,11 +40,10 @@ public class ProductController {
     public List<Product> getAllProducts(
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String search) {
-        if (search != null) return productRepository.findByNameContainingIgnoreCase(search);
-        if (category != null) return productRepository.findByCategory(category);
-        return productRepository.findAll();
+        if (search != null) return productRepository.findByNameContainingIgnoreCaseAndDeletedFalse(search);
+        if (category != null) return productRepository.findByCategoryAndDeletedFalse(category);
+        return productRepository.findAllActive();  // ← was productRepository.findAll()
     }
-
     @GetMapping("/{id}")
     public ResponseEntity<Product> getProduct(@PathVariable Long id) {
         return productRepository.findById(id)
@@ -157,15 +156,14 @@ public class ProductController {
             return ResponseEntity.ok("Product moved to inactive status.");
         }).orElse(ResponseEntity.notFound().build());
     }
+
     @GetMapping("/my-products")
     @PreAuthorize("hasAuthority('ROLE_SELLER')")
     public List<Product> getMyProducts(Authentication auth) {
         User seller = userRepository.findByEmail(auth.getName())
                 .orElseThrow(() -> new RuntimeException("Seller not found"));
-        return productRepository.findBySeller(seller);
+        return productRepository.findBySellerAndDeletedFalse(seller);  // ← was findBySeller(seller)
     }
-
-
     private String extractPublicId(String imageUrl) {
         // Find "/upload/" and take everything after it, strip version if present, strip extension
         String marker = "/upload/";
