@@ -10,8 +10,10 @@ import { Button } from "../components/ui/button";
 import NewListingModal from "../components/NewListingModal";
 import { useToast } from "../components/ui/use-toast";
 import { useCart } from "../context/CartContext";
-
 import { API_BASE, IMG_BASE } from "../lib/config";
+
+
+
 
 const getImageUrl = (path) => {
   if (!path) return null;
@@ -165,7 +167,9 @@ const SellerDashboard = () => {
     }
   };
 
-  const handleProductAdded = (newProduct) => setListings((prev) => [newProduct, ...prev]);
+  const handleProductAdded = () => {
+  fetchMyProducts(); // just refresh the list from backend
+};
 
   // ─── Stats ────────────────────────────────────────────────────────────────
   const completedOrders = orders.filter((o) =>
