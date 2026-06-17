@@ -40,6 +40,9 @@ public class ProductController {
     public List<Product> getAllProducts(
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String search) {
+
+        System.out.println("GET /api/products reached controller");
+
         if (search != null) return productRepository.findByNameContainingIgnoreCaseAndDeletedFalse(search);
         if (category != null) return productRepository.findByCategoryAndDeletedFalse(category);
         return productRepository.findByDeletedFalse();
