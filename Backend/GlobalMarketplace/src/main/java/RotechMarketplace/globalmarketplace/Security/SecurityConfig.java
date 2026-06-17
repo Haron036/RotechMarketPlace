@@ -42,40 +42,42 @@ public class SecurityConfig {
                     config.setAllowedHeaders(java.util.List.of("Authorization", "Content-Type", "Cache-Control", "X-Requested-With"));
                     config.setExposedHeaders(java.util.List.of("Authorization"));
                     config.setAllowCredentials(true);
-                    config.setAllowCredentials(true);
                     return config;
                 }))
+                // 1. Critical: Tell Spring Security to be stateless and evaluate your JWT filter on every request
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
                 .authorizeHttpRequests(auth -> auth
-                        // 1. Public Auth & Pre-flight
+                        // 2. Public Auth & Pre-flight
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
 
-                        // 2. Specific Protected Product Endpoints (MUST come before general /api/products/**)
-                        .requestMatchers(HttpMethod.GET, "/api/products/my-products").hasRole("SELLER")
+                        // 3. Changed from .hasRole("SELLER") to .hasAuthority("ROLE_SELLER") to match controllers
+                        .requestMatchers(HttpMethod.GET, "/api/products/my-products").hasAuthority("ROLE_SELLER")
 
-                        // 3. General Product Endpoints
+                        // 4. General Product Endpoints
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/products/**").hasRole("SELLER")
-                        .requestMatchers(HttpMethod.PUT, "/api/products/**").hasRole("SELLER")
-                        .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("SELLER")
+                        .requestMatchers(HttpMethod.POST, "/api/products/**").hasAuthority("ROLE_SELLER")
+                        .requestMatchers(HttpMethod.PUT, "/api/products/**").hasAuthority("ROLE_SELLER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasAuthority("ROLE_SELLER")
 
-                        // 4. Orders & Sales (Seller Specific)
-                        .requestMatchers("/api/sell/**").hasRole("SELLER")
-                        .requestMatchers(HttpMethod.GET, "/api/orders/seller").hasRole("SELLER")
-                        .requestMatchers(HttpMethod.PUT, "/api/orders/*/status").hasRole("SELLER")
+                        // 5. Orders & Sales (Updated to Authority)
+                        .requestMatchers("/api/sell/**").hasAuthority("ROLE_SELLER")
+                        .requestMatchers(HttpMethod.GET, "/api/orders/seller").hasAuthority("ROLE_SELLER")
+                        .requestMatchers(HttpMethod.PUT, "/api/orders/*/status").hasAuthority("ROLE_SELLER")
 
-                        // 5. Reviews & Payments
+                        // 6. Reviews & Payments
                         .requestMatchers(HttpMethod.GET, "/api/reviews/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/reviews/**").authenticated()
                         .requestMatchers("/api/payments/paypal/capture", "/api/payments/paypal/cancel", "/api/payments/mpesa/callback").permitAll()
                         .requestMatchers("/api/payments/**").authenticated()
 
-                        // 6. User Orders
+                        // 7. User Orders
                         .requestMatchers(HttpMethod.GET, "/api/orders/my-orders").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/orders").authenticated()
                         .requestMatchers("/api/orders/**").authenticated()
 
-                        // 7. Static Assets
+                        // 8. Static Assets
                         .requestMatchers("/uploads/**").permitAll()
 
                         .anyRequest().authenticated()

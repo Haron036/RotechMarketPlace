@@ -42,7 +42,7 @@ public class ProductController {
             @RequestParam(required = false) String search) {
         if (search != null) return productRepository.findByNameContainingIgnoreCaseAndDeletedFalse(search);
         if (category != null) return productRepository.findByCategoryAndDeletedFalse(category);
-        return productRepository.findAllActive();  // ← was productRepository.findAll()
+        return productRepository.findAllActive();
     }
     @GetMapping("/{id}")
     public ResponseEntity<Product> getProduct(@PathVariable Long id) {
@@ -52,7 +52,7 @@ public class ProductController {
     }
 
     @PostMapping(consumes = "multipart/form-data")
-    @PreAuthorize("hasRole('SELLER')")
+    @PreAuthorize("hasAuthority('ROLE_SELLER')")
     public ResponseEntity<Product> createProduct(
             @RequestPart("product") String productJson,
             @RequestPart("images") List<MultipartFile> images,
@@ -88,7 +88,7 @@ public class ProductController {
     }
 
     @PutMapping(value = "/{id}", consumes = "multipart/form-data")
-    @PreAuthorize("hasRole('SELLER')")
+    @PreAuthorize("hasAuthority('ROLE_SELLER')")
     public ResponseEntity<Product> updateProduct(
             @PathVariable Long id,
             @RequestPart("product") String productJson,
@@ -141,7 +141,7 @@ public class ProductController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('SELLER')")
+    @PreAuthorize("hasAuthority('ROLE_SELLER')")
     public ResponseEntity<?> deleteProduct(@PathVariable Long id, Authentication auth) {
         return productRepository.findById(id).map(product -> {
             if (!product.getSeller().getEmail().equals(auth.getName())) {
@@ -156,14 +156,15 @@ public class ProductController {
             return ResponseEntity.ok("Product moved to inactive status.");
         }).orElse(ResponseEntity.notFound().build());
     }
-
     @GetMapping("/my-products")
-    @PreAuthorize("hasRole('SELLER')")
+    @PreAuthorize("hasAuthority('ROLE_SELLER')")
     public List<Product> getMyProducts(Authentication auth) {
         User seller = userRepository.findByEmail(auth.getName())
                 .orElseThrow(() -> new RuntimeException("Seller not found"));
         return productRepository.findBySellerAndDeletedFalse(seller);  // ← was findBySeller(seller)
     }
+
+
     private String extractPublicId(String imageUrl) {
         // Find "/upload/" and take everything after it, strip version if present, strip extension
         String marker = "/upload/";
