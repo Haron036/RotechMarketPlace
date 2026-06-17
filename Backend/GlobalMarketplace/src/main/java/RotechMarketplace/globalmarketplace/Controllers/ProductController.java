@@ -52,7 +52,7 @@ public class ProductController {
     }
 
     @PostMapping(consumes = "multipart/form-data")
-    @PreAuthorize("hasAuthority('ROLE_SELLER')")
+    @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<Product> createProduct(
             @RequestPart("product") String productJson,
             @RequestPart("images") List<MultipartFile> images,
@@ -88,7 +88,7 @@ public class ProductController {
     }
 
     @PutMapping(value = "/{id}", consumes = "multipart/form-data")
-    @PreAuthorize("hasAuthority('ROLE_SELLER')")
+    @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<Product> updateProduct(
             @PathVariable Long id,
             @RequestPart("product") String productJson,
@@ -141,7 +141,7 @@ public class ProductController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('ROLE_SELLER')")
+    @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<?> deleteProduct(@PathVariable Long id, Authentication auth) {
         return productRepository.findById(id).map(product -> {
             if (!product.getSeller().getEmail().equals(auth.getName())) {
