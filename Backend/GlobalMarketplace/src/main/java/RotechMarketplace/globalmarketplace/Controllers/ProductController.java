@@ -158,7 +158,7 @@ public class ProductController {
     }
 
     @GetMapping("/my-products")
-    @PreAuthorize("hasAuthority('ROLE_SELLER')")
+    @PreAuthorize("hasRole('SELLER')")
     public List<Product> getMyProducts(Authentication auth) {
         User seller = userRepository.findByEmail(auth.getName())
                 .orElseThrow(() -> new RuntimeException("Seller not found"));
