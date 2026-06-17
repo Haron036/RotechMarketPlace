@@ -165,9 +165,7 @@ const SellerDashboard = () => {
     }
   };
 
-  const handleProductAdded = () => {
-  fetchMyProducts(); 
-};
+  const handleProductAdded = (newProduct) => setListings((prev) => [newProduct, ...prev]);
 
   // ─── Stats ────────────────────────────────────────────────────────────────
   const completedOrders = orders.filter((o) =>
