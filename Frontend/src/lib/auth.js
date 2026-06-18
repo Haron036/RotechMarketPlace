@@ -10,12 +10,12 @@ export const getUser = () => {
 
 export const isAuthenticated = () => {
   const token = localStorage.getItem("jwt_token");
-  const user = getUser();
-  return !!(token && user);
+  return !!token; 
 };
-
+//  CORRECT
 export const isSeller = () => {
-  const user = getUser();
-  // We use .toUpperCase() here to ensure it matches the Backend's "SELLER"
-  return user?.role?.toUpperCase() === "SELLER";
+  const session = JSON.parse(localStorage.getItem("user_session"));
+  
+  
+  return session && (session.role === "ROLE_SELLER" || session.role === "SELLER");
 };

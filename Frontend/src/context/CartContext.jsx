@@ -29,30 +29,38 @@ export const CartProvider = ({ children }) => {
   const [currency, setCurrency] = useState(currencies[0]); // default USD
 
   // ── Auto-detect currency from user's IP on mount ───────────
-  useEffect(() => {
-    const detectCurrency = async () => {
-      try {
-        const res  = await fetch("https://ipapi.co/json/");
-        const data = await res.json();
-
-        let countryCode = data.country_code; // e.g. "JP", "KE", "DE"
-
-        // Remap eurozone countries to a shared "EU" key
-        const currencyCode = EUROZONE.has(countryCode)
-          ? "EUR"
-          : COUNTRY_CURRENCY_MAP[countryCode];
-
-        if (!currencyCode) return; // unknown country → stay on USD
-
-        const matched = currencies.find((c) => c.code === currencyCode);
-        if (matched) setCurrency(matched);
-      } catch {
-        // Silent fail — stays on USD default
+  // ── Auto-detect currency from user's IP on mount ───────────
+useEffect(() => {
+  const detectCurrency = async () => {
+    try {
+      const res = await fetch("https://ipapi.co/json/");
+      
+      // 1. Guard check: Break immediately if rate-limited (429) or broken (500)
+      if (!res.ok) {
+        console.warn(`Currency detection failed with status code: ${res.status}`);
+        return; // Exits early safely, keeping default fallback currency
       }
-    };
 
-    detectCurrency();
-  }, []);
+      const data = await res.json();
+      let countryCode = data.country_code; // e.g. "JP", "KE", "DE"
+
+      // Remap eurozone countries to a shared "EU" key
+      const currencyCode = EUROZONE.has(countryCode)
+        ? "EUR"
+        : COUNTRY_CURRENCY_MAP[countryCode];
+
+      if (!currencyCode) return; // unknown country → stay on default
+
+      const matched = currencies.find((c) => c.code === currencyCode);
+      if (matched) setCurrency(matched);
+    } catch (error) {
+      // 2. Safely logs JSON syntax evaluation or connection timeouts
+      console.error("Muted silent fallback issue handling context lookup:", error);
+    }
+  };
+
+  detectCurrency();
+}, []);
 
   // ── Add to cart ────────────────────────────────────────────
   const addToCart = useCallback((product, quantity = 1) => {
