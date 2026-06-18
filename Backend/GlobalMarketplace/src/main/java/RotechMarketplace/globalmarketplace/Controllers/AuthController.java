@@ -43,8 +43,8 @@ public class AuthController {
         user.setName(request.getFullName());
         user.setEmail(request.getEmail());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(request.getRole().toUpperCase());
-
+        String rawRole = request.getRole().toUpperCase();
+        user.setRole(rawRole.startsWith("ROLE_") ? rawRole : "ROLE_" + rawRole);
         userRepository.save(user);
 
         // ── CHANGED: pass role so it's embedded in the token ──
