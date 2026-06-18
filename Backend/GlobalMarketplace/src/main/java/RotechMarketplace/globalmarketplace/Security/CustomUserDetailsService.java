@@ -26,9 +26,9 @@ public class CustomUserDetailsService implements UserDetailsService {
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
 
         // 2. Sanitize the role (Ensure it's uppercase and has no hidden spaces)
-        String rawRole = user.getRole() != null ? user.getRole().trim().toUpperCase() : "USER";
-        String authority = "ROLE_" + rawRole;
 
+        String rawRole = user.getRole() != null ? user.getRole().trim().toUpperCase() : "ROLE_USER";
+        String authority = rawRole.startsWith("ROLE_") ? rawRole : "ROLE_" + rawRole;
         // 3. Debugging logs for Render console
         System.out.println("--- Spring Security Debug ---");
         System.out.println("Authenticating: " + user.getEmail());

@@ -51,19 +51,14 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
 
                         // 2. Specific Protected Product Endpoints (MUST come before general /api/products/**)
-                        .requestMatchers(HttpMethod.GET, "/api/products/my-products").hasRole("SELLER")
 
-                        // 3. General Product Endpoints
-                        .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/products/**").hasRole("SELLER")
-                        .requestMatchers(HttpMethod.PUT, "/api/products/**").hasRole("SELLER")
-                        .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("SELLER")
-
-                        // 4. Orders & Sales (Seller Specific)
-                        .requestMatchers("/api/sell/**").hasRole("SELLER")
-                        .requestMatchers(HttpMethod.GET, "/api/orders/seller").hasRole("SELLER")
-                        .requestMatchers(HttpMethod.PUT, "/api/orders/*/status").hasRole("SELLER")
-
+                        .requestMatchers(HttpMethod.GET, "/api/products/my-products").hasAuthority("ROLE_SELLER")
+                        .requestMatchers(HttpMethod.POST, "/api/products/**").hasAuthority("ROLE_SELLER")
+                        .requestMatchers(HttpMethod.PUT, "/api/products/**").hasAuthority("ROLE_SELLER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasAuthority("ROLE_SELLER")
+                        .requestMatchers("/api/sell/**").hasAuthority("ROLE_SELLER")
+                        .requestMatchers(HttpMethod.GET, "/api/orders/seller").hasAuthority("ROLE_SELLER")
+                        .requestMatchers(HttpMethod.PUT, "/api/orders/*/status").hasAuthority("ROLE_SELLER")
                         // 5. Reviews & Payments
                         .requestMatchers(HttpMethod.GET, "/api/reviews/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/reviews/**").authenticated()
