@@ -1,5 +1,6 @@
 package RotechMarketplace.globalmarketplace.Entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -12,6 +13,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
+import lombok.ToString;
+import lombok.EqualsAndHashCode;
 
 import java.util.List;
 
@@ -60,7 +63,11 @@ public class Product {
     @Column(name = "tag")
     private List<String> tags;
 
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seller_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "password", "roles"})
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private User seller;
 }

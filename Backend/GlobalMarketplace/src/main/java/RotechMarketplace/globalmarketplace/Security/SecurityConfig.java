@@ -83,8 +83,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/orders").authenticated()
                         .requestMatchers("/api/orders/**").authenticated()
 
-                        // ── 7. Static Assets ──────────────────────────────────────
+                        // ── 7. Static Assets & Internal Routes ─────────────────────
                         .requestMatchers("/uploads/**").permitAll()
+                        .requestMatchers("/error").permitAll() //
                         .requestMatchers("/", "/index.html", "/assets/**", "/*.js", "/*.css", "/*.ico").permitAll()
 
                         // ── 8. Everything else requires auth ──────────────────────

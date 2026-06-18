@@ -37,34 +37,32 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             if (jwt != null && jwtUtils.validateToken(jwt)) {
                 String email = jwtUtils.getEmailFromToken(jwt);
 
-                // Only authenticate if not already authenticated in this context
                 if (SecurityContextHolder.getContext().getAuthentication() == null) {
-                    UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+                    // 1. Clean Extraction: Get roles directly from the secure cryptographed token claims
+                    var authorities = jwtUtils.getAuthoritiesFromToken(jwt);
 
-                    // Log authorities to verify ROLE_SELLER is present
-                    System.out.println("DEBUG: Authenticating " + email + " with authorities: " + userDetails.getAuthorities());
+                    // 2. Debug Trace Line: Check exactly what strings are extracted into your terminal
+                    System.out.println("DEBUG FILTER [Path: " + request.getRequestURI() + "]: Extracted authorities from JWT payload -> " + authorities);
 
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
-                                    userDetails,
+                                    email, // Can pass email string directly for stateless setups
                                     null,
-                                    userDetails.getAuthorities()
+                                    authorities // ◄── Bound securely directly from the token
                             );
 
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
-            } else if (request.getRequestURI().startsWith("/api/products") && "POST".equalsIgnoreCase(request.getMethod())) {
-                // Specific debug for your failing endpoint
-                System.out.println("DEBUG: Auth failed for POST /api/products. JWT present? " + (jwt != null));
+            } else if (request.getRequestURI().contains("/my-products")) {
+                System.out.println("DEBUG FILTER: Token was completely missing or expired for secure path /my-products");
             }
         } catch (Exception e) {
-            logger.error("Cannot set user authentication: {}", e.getMessage());
+            logger.error("Cannot set user authentication: {}", e.getMessage(), e);
         }
 
         filterChain.doFilter(request, response);
     }
-
     private String parseJwt(HttpServletRequest request) {
         String headerAuth = request.getHeader("Authorization");
 
