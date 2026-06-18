@@ -12,9 +12,6 @@ import { useToast } from "../components/ui/use-toast";
 import { useCart } from "../context/CartContext";
 import { API_BASE, IMG_BASE } from "../lib/config";
 
-
-
-
 const getImageUrl = (path) => {
   if (!path) return null;
   if (path.startsWith("http")) return path;
@@ -70,15 +67,14 @@ const SellerDashboard = () => {
       if (response.ok) {
         setListings(await response.json());
       } else if (response.status === 403) {
-    toast({ 
-        variant: "destructive", 
-        title: "Unauthorized", 
-        description: "You do not have seller permissions." 
-    });
-    // Redirect them away so they don't think they are logged in
-    window.location.href = "/"; 
-    return;
-}
+        toast({ 
+            variant: "destructive", 
+            title: "Unauthorized", 
+            description: "You do not have seller permissions." 
+        });
+        window.location.href = "/"; 
+        return;
+      }
     } catch {
       toast({ variant: "destructive", title: "Error", description: "Could not load listings." });
     } finally {
@@ -168,8 +164,8 @@ const SellerDashboard = () => {
   };
 
   const handleProductAdded = () => {
-  fetchMyProducts(); // just refresh the list from backend
-};
+    fetchMyProducts(); 
+  };
 
   // ─── Stats ────────────────────────────────────────────────────────────────
   const completedOrders = orders.filter((o) =>
