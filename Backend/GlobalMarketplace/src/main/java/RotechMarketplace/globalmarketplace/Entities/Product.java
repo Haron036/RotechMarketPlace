@@ -58,13 +58,13 @@ public class Product {
     @Column(name = "image_url", length = 1000)
     private List<String> images;
 
-    @ElementCollection
+
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "product_tags", joinColumns = @JoinColumn(name = "product_id"))
     @Column(name = "tag")
     private List<String> tags;
 
-
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "seller_id")
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "password", "roles"})
     @ToString.Exclude

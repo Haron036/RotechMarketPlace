@@ -41,13 +41,16 @@ public class ProductController {
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String search) {
 
-        System.out.println("GET /api/products reached controller");
+        System.out.println("GET /api/products reached controller - Safe Join Execution");
 
-        if (search != null) return productRepository.findByNameContainingIgnoreCaseAndDeletedFalse(search);
-        if (category != null) return productRepository.findByCategoryAndDeletedFalse(category);
-        return productRepository.findByDeletedFalse();
+        if (search != null) {
+            return productRepository.findByNameContainingIgnoreCaseAndDeletedFalseWithSellers(search);
+        }
+        if (category != null) {
+            return productRepository.findByCategoryAndDeletedFalseWithSellers(category);
+        }
+        return productRepository.findByDeletedFalseWithSellers();
     }
-
     @GetMapping("/{id}")
     public ResponseEntity<Product> getProduct(@PathVariable Long id) {
         return productRepository.findById(id)
