@@ -36,7 +36,8 @@ public class SecurityConfig {
                     config.setAllowedOrigins(java.util.List.of(
                             "http://localhost:5173",
                             "http://localhost:3000",
-                            "https://rotechmarketplace.onrender.com"
+                            "https://rotechmarketplace.onrender.com",
+                            "https://globalmarketplace1.onrender.com"
                     ));
                     config.setAllowedMethods(java.util.List.of("GET","POST","PUT","DELETE","OPTIONS"));
                     config.setAllowedHeaders(java.util.List.of("Authorization", "Content-Type", "Cache-Control", "X-Requested-With"));
