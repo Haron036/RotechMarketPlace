@@ -59,8 +59,10 @@ const Auth = () => {
       toast({ title: "Success!", description: "Redirecting..." });
 
       // NAVIGATION LOGIC
-      // Use uppercase comparison to match your AuthController.java
-      if (data.role === "ROLE_SELLER" || data.role === "SELLER") {
+      // Normalize the role text to upper case and trim any formatting issues
+      const normalizedRole = data.role ? String(data.role).toUpperCase().trim() : "";
+
+      if (normalizedRole === "ROLE_SELLER" || normalizedRole === "SELLER") {
         navigate("/sell");
       } else {
         navigate("/");
