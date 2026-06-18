@@ -60,23 +60,32 @@ const SellerDashboard = () => {
   const fetchMyProducts = useCallback(async () => {
     setLoading(true);
     const token = localStorage.getItem("jwt_token");
+    
     try {
       const response = await fetch(`${API_BASE}/products/my-products`, {
-        headers: { Authorization: `Bearer ${token}` },
+        method: "GET",
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}` 
+        },
       });
+
       if (response.ok) {
-        setListings(await response.json());
+        const data = await response.json();
+        setListings(data);
       } else if (response.status === 403) {
+        console.error("Spring Security 403 Forbidden: Token rejected at endpoint /products/my-products");
         toast({ 
-            variant: "destructive", 
-            title: "Unauthorized", 
-            description: "You do not have seller permissions." 
+          variant: "destructive", 
+          title: "Authority Error (403)", 
+          description: "Your token was rejected by the server filter chain. Check backend console logs." 
         });
-        window.location.href = "/"; 
-        return;
+      } else {
+        console.warn(`Server responded with unexpected status code: ${response.status}`);
       }
-    } catch {
-      toast({ variant: "destructive", title: "Error", description: "Could not load listings." });
+    } catch (error) {
+      console.error("Network interface error connecting to products endpoint:", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not load listings from server backend." });
     } finally {
       setLoading(false);
     }
@@ -88,15 +97,21 @@ const SellerDashboard = () => {
     const token = localStorage.getItem("jwt_token");
     try {
       const response = await fetch(`${API_BASE}/orders/seller`, {
-        headers: { Authorization: `Bearer ${token}` },
+        method: "GET",
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}` 
+        },
       });
       if (response.ok) {
         setOrders(await response.json());
       } else {
+        console.error(`Orders endpoint responded with error code: ${response.status}`);
         toast({ variant: "destructive", title: "Error", description: "Could not load orders." });
       }
-    } catch {
-      toast({ variant: "destructive", title: "Error", description: "Could not load orders." });
+    } catch (error) {
+      console.error("Failed to fetch seller orders:", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not load orders due to interface drop." });
     } finally {
       setOrdersLoading(false);
     }
@@ -186,10 +201,10 @@ const SellerDashboard = () => {
   // ─── Helper: build Google Maps URL ───────────────────────────────────────
   const buildMapsUrl = (lat, lng, address) => {
     if (lat && lng) {
-      return `https://www.google.com/maps?q=${lat},${lng}`;
+      return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
     }
     if (address) {
-      return `https://www.google.com/maps?q=${encodeURIComponent(address)}`;
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
     }
     return null;
   };
