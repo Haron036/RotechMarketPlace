@@ -2,6 +2,7 @@ package RotechMarketplace.globalmarketplace.Controllers;
 
 import RotechMarketplace.globalmarketplace.DTOs.OrderRequest;
 import RotechMarketplace.globalmarketplace.DTOs.OrderResponse;
+import RotechMarketplace.globalmarketplace.DTOs.TrackingUpdateRequest;
 import RotechMarketplace.globalmarketplace.Entities.CustomerOrder;
 import RotechMarketplace.globalmarketplace.Entities.OrderItem;
 import RotechMarketplace.globalmarketplace.Entities.Product;
@@ -11,6 +12,7 @@ import RotechMarketplace.globalmarketplace.Repositories.ProductRepository;
 import RotechMarketplace.globalmarketplace.Repositories.UserRepository;
 import RotechMarketplace.globalmarketplace.Services.EmailService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -220,5 +222,33 @@ public class OrderController {
         if (!valid) {
             throw new RuntimeException("Invalid transition: " + current + " → " + next);
         }
+    }
+    @PutMapping("/{id}/tracking")
+    @PreAuthorize("hasAuthority('ROLE_SELLER')")
+    public ResponseEntity<?> updateTracking(@PathVariable Long id,
+                                            @RequestBody TrackingUpdateRequest req,
+                                            Authentication auth) {
+        CustomerOrder order = orderRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        // Optional: verify this seller owns the order
+        order.setShippingMethod("SHIPPING");
+        order.setCourierName(req.getCourierName());
+        order.setTrackingNumber(req.getTrackingNumber());
+        order.setTrackingUrl(req.getTrackingUrl());
+        order.setEstimatedDelivery(req.getEstimatedDelivery());
+        order.setStatus(CustomerOrder.OrderStatus.SHIPPED);
+        orderRepository.save(order);
+
+        emailService.sendShippedEmail(
+                order.getBuyer().getEmail(),
+                order.getBuyer().getName(),
+                order.getId(),
+                req.getCourierName(),
+                req.getTrackingNumber(),
+                req.getTrackingUrl(),
+                req.getEstimatedDelivery()
+        );
+        return ResponseEntity.ok(Map.of("message", "Tracking updated"));
     }
 }

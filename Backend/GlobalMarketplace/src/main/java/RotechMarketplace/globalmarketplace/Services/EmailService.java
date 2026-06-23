@@ -67,19 +67,22 @@ public class EmailService {
             """;
     }
 
-    private String ctaButton(String label) {
-        return """
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="http://localhost:5173/my-orders"
-                 style="background: linear-gradient(135deg, #6366f1, #8b5cf6);
-                        color: white; padding: 12px 30px; border-radius: 8px;
-                        text-decoration: none; font-weight: bold; font-size: 14px;">
-                %s
-              </a>
-            </div>
-            """.formatted(label);
-    }
 
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
+
+
+    private String ctaButton(String label, String path) {
+        return """
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="%s%s" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);
+                  color: white; padding: 12px 30px; border-radius: 8px;
+                  text-decoration: none; font-weight: bold; font-size: 14px;">
+            %s
+          </a>
+        </div>
+        """.formatted(frontendUrl, path, label);
+    }
     // ─── Order Confirmed ──────────────────────────────────────────────────────
     public void sendOrderConfirmedEmail(String buyerEmail, String buyerName,
                                         Long orderId, Double totalAmount) {
@@ -105,7 +108,7 @@ public class EmailService {
                   </table>
                 </div>
                 """.formatted(buyerName, orderId, orderId, totalAmount)
-                + ctaButton("Track My Order") + emailFooter();
+                + ctaButton("Track My Order", "/my-orders") + emailFooter();
         sendHtmlEmail(buyerEmail, subject, html);
     }
 
@@ -156,7 +159,7 @@ public class EmailService {
               ⚠️ Please bring your order ID <strong>#%d</strong> when collecting.
             </p>
             """.formatted(buyerName, itemNames, pickupLocation, mapsUrl, orderId)
-                + ctaButton("View My Orders") + emailFooter();
+                + ctaButton("View My Orders", "/my-orders") + emailFooter();
 
         sendHtmlEmail(buyerEmail, subject, html);
     }
@@ -189,7 +192,7 @@ public class EmailService {
                   </table>
                 </div>
                 """.formatted(buyerName, itemNames, orderId)
-                + ctaButton("Browse More Products") + emailFooter();
+                + ctaButton("Browse More Products", "/products") + emailFooter();
         sendHtmlEmail(buyerEmail, subject, html);
     }
 
@@ -208,7 +211,51 @@ public class EmailService {
               <p style="color: #7f1d1d; font-size: 14px; margin: 0;">%s</p>
             </div>
             """.formatted(buyerName, orderId, reason)
-                + ctaButton("Browse Marketplace") + emailFooter();
+                + ctaButton("Browse Marketplace", "/products") + emailFooter();
+
+        sendHtmlEmail(buyerEmail, subject, html);
+    }
+    public void sendShippedEmail(String buyerEmail, String buyerName,
+                                 Long orderId, String courier,
+                                 String trackingNumber, String trackingUrl,
+                                 String estimatedDelivery) {
+        String subject = "Your order #" + orderId + " has shipped! 🚚";
+        String html = emailHeader("Order Shipped") + """
+        <h2 style="color: #111827; margin-top: 0;">Your order is on the way! 🚚</h2>
+        <p style="color: #6b7280;">Hi <strong>%s</strong>,</p>
+        <p style="color: #6b7280; line-height: 1.6;">
+          Order <strong>#%d</strong> has been handed to <strong>%s</strong> and is heading your way.
+        </p>
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe;
+                    border-left: 4px solid #3b82f6; border-radius: 8px;
+                    padding: 20px; margin: 20px 0;">
+          <h3 style="color: #1e40af; margin: 0 0 12px; font-size: 15px;">📦 Tracking details</h3>
+          <table style="width: 100%%;">
+            <tr>
+              <td style="color: #6b7280; font-size: 14px;">Courier</td>
+              <td style="color: #111827; font-weight: bold; text-align: right;">%s</td>
+            </tr>
+            <tr>
+              <td style="color: #6b7280; font-size: 14px; padding-top: 8px;">Tracking number</td>
+              <td style="color: #111827; font-weight: bold; text-align: right; padding-top: 8px;">%s</td>
+            </tr>
+            <tr>
+              <td style="color: #6b7280; font-size: 14px; padding-top: 8px;">Est. delivery</td>
+              <td style="color: #111827; font-weight: bold; text-align: right; padding-top: 8px;">%s</td>
+            </tr>
+          </table>
+          <div style="margin-top: 16px;">
+            <a href="%s" target="_blank"
+               style="background: #3b82f6; color: white; padding: 9px 20px;
+                      border-radius: 7px; text-decoration: none;
+                      font-size: 13px; font-weight: bold;">
+              Track with %s →
+            </a>
+          </div>
+        </div>
+        """.formatted(buyerName, orderId, courier, courier,
+                trackingNumber, estimatedDelivery, trackingUrl, courier)
+                + emailFooter();
         sendHtmlEmail(buyerEmail, subject, html);
     }
 }

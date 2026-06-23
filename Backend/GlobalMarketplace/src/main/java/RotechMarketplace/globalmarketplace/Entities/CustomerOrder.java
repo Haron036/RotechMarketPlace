@@ -44,6 +44,11 @@ public class CustomerOrder {
     private String paymentReference;  // IntaSend tracking_id, or M-Pesa CheckoutRequestID
 
     private LocalDateTime createdAt;
+    private String shippingMethod;
+    private String courierName;
+    private String trackingNumber;
+    private String trackingUrl;
+    private String estimatedDelivery;
 
     public enum OrderStatus {
         PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED, READY_FOR_PICKUP, COMPLETED
