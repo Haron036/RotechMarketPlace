@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Package, Loader2, ChevronDown, ChevronUp,
-  Clock, CheckCircle, MapPin, CheckCircle2, XCircle, ShoppingBag
+  Clock, CheckCircle, MapPin, CheckCircle2, XCircle,
+  ShoppingBag, Truck, Home
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import Navbar from "../components/Navbar";
@@ -10,7 +11,6 @@ import Footer from "../components/Footer";
 import { Button } from "../components/ui/button";
 import { useToast } from "../components/ui/use-toast";
 import { useCart } from "../context/CartContext";
-
 import { API_BASE, IMG_BASE } from "../lib/config";
 
 const getImageUrl = (path) => {
@@ -18,29 +18,48 @@ const getImageUrl = (path) => {
   return path.startsWith("http") ? path : `${IMG_BASE}${path}`;
 };
 
-// ─── Updated Status Config ────────────────────────────────────────────────────
+// ─── Status Config ────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
-  PENDING:          { label: "Pending",       color: "bg-yellow-500/10 text-yellow-600",   icon: Clock,        step: 0 },
-  CONFIRMED:        { label: "Confirmed",     color: "bg-blue-500/10 text-blue-600",       icon: CheckCircle,  step: 1 },
-  READY_FOR_PICKUP: { label: "Ready",         color: "bg-orange-500/10 text-orange-600",   icon: MapPin,       step: 2 },
-  COMPLETED:        { label: "Collected",     color: "bg-emerald-500/10 text-emerald-600", icon: CheckCircle2, step: 3 },
-  CANCELLED:        { label: "Cancelled",     color: "bg-red-500/10 text-red-500",         icon: XCircle,      step: -1 },
+  PENDING:          { label: "Pending",       color: "bg-yellow-500/10 text-yellow-600",   icon: Clock,         pickupStep: 0, shippingStep: 0 },
+  CONFIRMED:        { label: "Confirmed",     color: "bg-blue-500/10 text-blue-600",       icon: CheckCircle,   pickupStep: 1, shippingStep: 1 },
+  READY_FOR_PICKUP: { label: "Ready",         color: "bg-orange-500/10 text-orange-600",   icon: MapPin,        pickupStep: 2, shippingStep: -1 },
+  COMPLETED:        { label: "Collected",     color: "bg-emerald-500/10 text-emerald-600", icon: CheckCircle2,  pickupStep: 3, shippingStep: -1 },
+  SHIPPED:          { label: "Shipped",       color: "bg-indigo-500/10 text-indigo-600",   icon: Truck,         pickupStep: -1, shippingStep: 2 },
+  DELIVERED:        { label: "Delivered",     color: "bg-emerald-500/10 text-emerald-600", icon: Home,          pickupStep: -1, shippingStep: 3 },
+  CANCELLED:        { label: "Cancelled",     color: "bg-red-500/10 text-red-500",         icon: XCircle,       pickupStep: -1, shippingStep: -1 },
 };
 
-const STEPS = ["Pending", "Confirmed", "Ready", "Collected"];
+const PICKUP_STEPS   = ["Pending", "Confirmed", "Ready", "Collected"];
+const SHIPPING_STEPS = ["Pending", "Confirmed", "Shipped", "Delivered"];
+
+// Which statuses belong to the shipping flow
+const SHIPPING_STATUSES = new Set(["SHIPPED", "DELIVERED"]);
+// Pickup statuses (everything else that isn't cancelled)
+const PICKUP_STATUSES = new Set(["PENDING", "CONFIRMED", "READY_FOR_PICKUP", "COMPLETED"]);
+
+const isShippingOrder = (order) =>
+  order.shippingMethod === "SHIPPING" || SHIPPING_STATUSES.has(order.status);
 
 // ─── Order Progress Bar ───────────────────────────────────────────────────────
-const OrderProgress = ({ status }) => {
-  if (status === "CANCELLED") return null;
-  const currentStep = STATUS_CONFIG[status]?.step ?? 0;
+const OrderProgress = ({ order }) => {
+  if (order.status === "CANCELLED") return null;
+
+  const shipping = isShippingOrder(order);
+  const steps = shipping ? SHIPPING_STEPS : PICKUP_STEPS;
+  const config = STATUS_CONFIG[order.status];
+  const currentStep = shipping
+    ? (config?.shippingStep ?? 0)
+    : (config?.pickupStep ?? 0);
 
   return (
     <div className="flex items-center gap-0 mt-4 mb-2">
-      {STEPS.map((step, i) => (
+      {steps.map((step, i) => (
         <div key={step} className="flex items-center flex-1 last:flex-none">
           <div className="flex flex-col items-center">
             <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-              i <= currentStep ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+              i <= currentStep
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary text-muted-foreground"
             }`}>
               {i < currentStep ? "✓" : i + 1}
             </div>
@@ -50,7 +69,7 @@ const OrderProgress = ({ status }) => {
               {step}
             </span>
           </div>
-          {i < STEPS.length - 1 && (
+          {i < steps.length - 1 && (
             <div className={`h-0.5 flex-1 mx-1 mb-4 transition-all ${
               i < currentStep ? "bg-primary" : "bg-border"
             }`} />
@@ -61,14 +80,82 @@ const OrderProgress = ({ status }) => {
   );
 };
 
+// ─── Tracking Card (shown when order is SHIPPED or DELIVERED) ─────────────────
+const TrackingCard = ({ order }) => {
+  if (!order.trackingNumber) return null;
+  if (order.status !== "SHIPPED" && order.status !== "DELIVERED") return null;
+
+  return (
+    <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 flex gap-3">
+      <Truck className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
+      <div className="flex-1">
+        <h4 className="text-sm font-bold text-indigo-900">Shipment tracking</h4>
+        <div className="mt-2 space-y-1">
+          {order.courierName && (
+            <p className="text-xs text-indigo-800">
+              <span className="font-semibold">Courier:</span> {order.courierName}
+            </p>
+          )}
+          <p className="text-xs text-indigo-800 font-mono">
+            <span className="font-sans font-semibold">Tracking #:</span> {order.trackingNumber}
+          </p>
+          {order.estimatedDelivery && (
+            <p className="text-xs text-indigo-800">
+              <span className="font-semibold">Est. delivery:</span> {order.estimatedDelivery}
+            </p>
+          )}
+        </div>
+        {order.trackingUrl && (
+          <a
+            href={order.trackingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex items-center gap-1.5 bg-indigo-600 text-white text-xs font-bold px-3 py-1.5 rounded-md hover:bg-indigo-700 transition-colors"
+          >
+            <Truck className="w-3.5 h-3.5" />
+            Track with {order.courierName ?? "courier"} →
+          </a>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── Pickup Location Card ─────────────────────────────────────────────────────
+const PickupCard = ({ order }) => {
+  if (order.status !== "READY_FOR_PICKUP") return null;
+
+  // Prefer order-level pickup location; fall back to first product
+  const location =
+    order.pickupLocation ??
+    order.items?.[0]?.product?.pickupLocation;
+
+  if (!location) return null;
+
+  return (
+    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 flex gap-3">
+      <MapPin className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+      <div>
+        <h4 className="text-sm font-bold text-orange-900">Collection point</h4>
+        <p className="text-sm text-orange-800 mt-1">{location}</p>
+        <a
+          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs font-bold text-orange-700 underline mt-2 inline-block"
+        >
+          View on Google Maps →
+        </a>
+      </div>
+    </div>
+  );
+};
+
 // ─── Single Order Card ────────────────────────────────────────────────────────
 const OrderCard = ({ order, formatPrice }) => {
   const [expanded, setExpanded] = useState(false);
   const config = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.PENDING;
   const Icon = config.icon;
-
-  // Assuming pickup details come from the first product in the order
-  const pickupInfo = order.items?.[0]?.product;
 
   return (
     <motion.div
@@ -76,6 +163,7 @@ const OrderCard = ({ order, formatPrice }) => {
       animate={{ opacity: 1, y: 0 }}
       className="bg-card border border-border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
     >
+      {/* Header row */}
       <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -84,9 +172,12 @@ const OrderCard = ({ order, formatPrice }) => {
           <div>
             <p className="text-sm font-bold text-foreground">Order #{order.id}</p>
             <p className="text-xs text-muted-foreground">
-              {order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-KE", {
-                day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
-              }) : "—"}
+              {order.createdAt
+                ? new Date(order.createdAt).toLocaleDateString("en-KE", {
+                    day: "2-digit", month: "short", year: "numeric",
+                    hour: "2-digit", minute: "2-digit",
+                  })
+                : "—"}
             </p>
           </div>
         </div>
@@ -96,17 +187,24 @@ const OrderCard = ({ order, formatPrice }) => {
             <Icon className="w-3 h-3" />
             {config.label}
           </span>
-          <span className="text-sm font-bold text-foreground">{formatPrice(order.totalAmount ?? 0)}</span>
-          <button onClick={() => setExpanded(!expanded)} className="p-1 hover:bg-secondary rounded-full transition-colors">
+          <span className="text-sm font-bold text-foreground">
+            {formatPrice(order.totalAmount ?? 0)}
+          </span>
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="p-1 hover:bg-secondary rounded-full transition-colors"
+          >
             {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
           </button>
         </div>
       </div>
 
+      {/* Progress bar */}
       <div className="px-5 pb-4">
-        <OrderProgress status={order.status} />
+        <OrderProgress order={order} />
       </div>
 
+      {/* Expanded detail */}
       <AnimatePresence>
         {expanded && (
           <motion.div
@@ -116,45 +214,62 @@ const OrderCard = ({ order, formatPrice }) => {
             className="border-t border-border bg-muted/30"
           >
             <div className="p-5 space-y-4">
-              {/* Pickup Location Card (Visible when Ready) */}
-              {order.status === "READY_FOR_PICKUP" && pickupInfo?.pickupLocation && (
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 flex gap-3">
-                  <MapPin className="w-5 h-5 text-orange-600 flex-shrink-0" />
-                  <div>
-                    <h4 className="text-sm font-bold text-orange-900">Collection Point</h4>
-                    <p className="text-sm text-orange-800 mt-1">{pickupInfo.pickupLocation}</p>
-                    <a 
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pickupInfo.pickupLocation)}`}
-                      target="_blank" rel="noreferrer"
-                      className="text-xs font-bold text-orange-700 underline mt-2 inline-block"
-                    >
-                      View on Google Maps
-                    </a>
-                  </div>
-                </div>
-              )}
+              {/* Shipping tracking card */}
+              <TrackingCard order={order} />
 
+              {/* Pickup location card */}
+              <PickupCard order={order} />
+
+              {/* Items list */}
               <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase text-muted-foreground">Items in this order</p>
+                <p className="text-xs font-semibold uppercase text-muted-foreground">
+                  Items in this order
+                </p>
                 {order.items?.map((item, i) => (
-                  <div key={i} className="flex items-center gap-3 bg-card p-2 rounded-lg border border-border/50">
-                    <div className="w-12 h-12 rounded-lg border border-border overflow-hidden bg-secondary">
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 bg-card p-2 rounded-lg border border-border/50"
+                  >
+                    <div className="w-12 h-12 rounded-lg border border-border overflow-hidden bg-secondary flex-shrink-0">
                       {item.product?.images?.[0] ? (
-                        <img src={getImageUrl(item.product.images[0])} alt="" className="w-full h-full object-cover" />
+                        <img
+                          src={getImageUrl(item.product.images[0])}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center"><Package className="w-4 h-4 text-muted-foreground" /></div>
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Package className="w-4 h-4 text-muted-foreground" />
+                        </div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <Link to={`/product/${item.product?.id}`} className="text-sm font-medium hover:text-primary transition-colors line-clamp-1">
+                      <Link
+                        to={`/product/${item.product?.id}`}
+                        className="text-sm font-medium hover:text-primary transition-colors line-clamp-1"
+                      >
                         {item.product?.name}
                       </Link>
-                      <p className="text-xs text-muted-foreground">Qty: {item.quantity} × {formatPrice(item.price)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Qty: {item.quantity} × {formatPrice(item.price)}
+                      </p>
                     </div>
-                    <p className="text-sm font-bold">{formatPrice(item.price * item.quantity)}</p>
+                    <p className="text-sm font-bold">
+                      {formatPrice(item.price * item.quantity)}
+                    </p>
                   </div>
                 ))}
               </div>
+
+              {/* Payment method badge */}
+              {order.paymentMethod && (
+                <p className="text-xs text-muted-foreground">
+                  Paid via{" "}
+                  <span className="font-semibold text-foreground">
+                    {order.paymentMethod}
+                  </span>
+                </p>
+              )}
             </div>
           </motion.div>
         )}
@@ -189,8 +304,13 @@ const MyOrders = () => {
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
-  const FILTERS = ["ALL", "PENDING", "CONFIRMED", "READY_FOR_PICKUP", "COMPLETED", "CANCELLED"];
-  const filtered = filter === "ALL" ? orders : orders.filter(o => o.status === filter);
+  const FILTERS = ["ALL", "PENDING", "CONFIRMED", "READY_FOR_PICKUP", "SHIPPED", "DELIVERED", "COMPLETED", "CANCELLED"];
+
+  const countFor = (f) =>
+    f === "ALL" ? orders.length : orders.filter((o) => o.status === f).length;
+
+  const filtered =
+    filter === "ALL" ? orders : orders.filter((o) => o.status === filter);
 
   return (
     <div className="min-h-screen bg-background">
@@ -199,38 +319,52 @@ const MyOrders = () => {
         <div className="flex justify-between items-end mb-8">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">My Orders</h1>
-            <p className="text-muted-foreground">Track your marketplace collections</p>
+            <p className="text-muted-foreground">Track your purchases worldwide</p>
           </div>
           <Button variant="ghost" size="sm" onClick={fetchOrders} disabled={loading}>
             {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Refresh"}
           </Button>
         </div>
 
+        {/* Filter pills — only show pills that have orders */}
         <div className="flex gap-2 overflow-x-auto pb-4 mb-4 no-scrollbar">
-          {FILTERS.map((f) => (
+          {FILTERS.filter((f) => f === "ALL" || countFor(f) > 0).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
               className={`whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold border transition-all ${
-                filter === f ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground hover:border-primary/50"
+                filter === f
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card text-muted-foreground hover:border-primary/50"
               }`}
             >
-              {f.replace(/_/g, " ")} ({filter === "ALL" ? orders.length : orders.filter(o => o.status === f).length})
+              {f.replace(/_/g, " ")} ({countFor(f)})
             </button>
           ))}
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>
+          <div className="flex justify-center py-20">
+            <Loader2 className="w-10 h-10 animate-spin text-primary" />
+          </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-20 bg-muted/20 rounded-2xl border border-dashed border-border">
             <ShoppingBag className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-            <h3 className="text-lg font-bold">No {filter !== "ALL" ? filter.toLowerCase() : ""} orders</h3>
-            <Link to="/products" className="mt-4 inline-block text-primary font-bold hover:underline">Continue Shopping</Link>
+            <h3 className="text-lg font-bold">
+              No {filter !== "ALL" ? filter.replace(/_/g, " ").toLowerCase() : ""} orders
+            </h3>
+            <Link
+              to="/products"
+              className="mt-4 inline-block text-primary font-bold hover:underline"
+            >
+              Continue Shopping
+            </Link>
           </div>
         ) : (
           <div className="space-y-4">
-            {filtered.map(order => <OrderCard key={order.id} order={order} formatPrice={formatPrice} />)}
+            {filtered.map((order) => (
+              <OrderCard key={order.id} order={order} formatPrice={formatPrice} />
+            ))}
           </div>
         )}
       </div>
